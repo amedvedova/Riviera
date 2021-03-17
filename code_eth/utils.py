@@ -122,7 +122,8 @@ def get_hourly_vars(df):
     return t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h
 
 
-def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min, date, loc, ref_data):
+def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min,
+                             date, loc, ref_data):
     # convert u, v, w from cm/s to m/s
     arr[:, [0, 1, 2]] = arr[:, [0, 1, 2]] / 100.0
     # convert speed of sound to temperature (in Kelvin)
@@ -140,8 +141,8 @@ def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min, date, loc, re
                      p_30min=('time_30min', ref_data.p))
     coords = dict(time=timerange_full,
                   time_30min=timerange_30min,
-                  time_1h=date)
-    
+                  time_1h=date.to_datetime64())
+
     # if krypton is present, calculate also humidity
     if (loc in ['A', 'C', 'F']):
         # from krypton voltage calculate humidity, add it to the data set
@@ -152,6 +153,10 @@ def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min, date, loc, re
         q = get_humidity(loc, voltage, rho_air_h, rho_wv_h)
         # add humidity q to the data_vars dictionary
         data_vars['q'] = ('time', q)
+        # add hourly variables which were used to calculate q
+        data_vars['e_1h'] = ('time_1h', [e_h])           # vapor pressure [Pa] 
+        data_vars['rho_wv_1h'] = ('time_1h', [rho_wv_h])     # Air density [g/m^3]
+        data_vars['rho_air_1h'] = ('time_1h', [rho_air_h])   # Water vapor density
         
     return data_vars, coords, T_info
 

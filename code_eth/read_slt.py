@@ -97,8 +97,11 @@ for filename in sorted(fs)[0:4]:
                                                            date)
 
     # Make dataset
-    ds = xr.Dataset(data_vars=data_vars,
-                    coords=coords)
+    # ds = xr.Dataset(data_vars=data_vars,
+    #                 coords=coords)
+    ds = xr.Dataset(coords=coords)
+    ds = ds.expand_dims('time_1h')
+    ds = ds.assign(data_vars)
 
     # Add attributes to the variables
     ds.u.attrs = {'units': 'm/s'}
@@ -109,6 +112,7 @@ for filename in sorted(fs)[0:4]:
 
     # Add general metadata
     ds.attrs['frequency [Hz]'] = freq
+    ds.attrs['info'] = 'If there are NaNs at the end of the file, these were added manually to make the length of the file 75000.'
 
     # sonic metadata
     ds.attrs['sonic tower and level'] = sonic_location[loc]
@@ -116,14 +120,6 @@ for filename in sorted(fs)[0:4]:
     ds.attrs['sonic height [m]'] = sonic_height[loc]
     ds.attrs['sonic location [lat, lon]'] = sonic_latlon[loc]
     ds.attrs['tower altitude [m a.s.l.]'] = height_asl[loc]
-
-    # there's a krypton present AND reference data is available
-    # add the humidity data + metadata to the dataset
-    if 'q' in ds.variables:
-        # add units, krypton metadata (height and serial number)
-        ds.q.attrs = {'units': 'kg/kg'}
-        ds.attrs['krypton serial number'] = krypton_SN[loc]
-        ds.attrs['krypton height'] = krypton_height[loc]
 
     if ref_data is not None:
         # Add 30 min variable metadata
@@ -133,6 +129,19 @@ for filename in sorted(fs)[0:4]:
                              'info': 'Loaded from reference file'}
         ds.p_30min.attrs = {'units': 'hPa',
                             'info': 'Calculated from the reference pressure and temperature in the reference file'}
+        # there's a krypton present AND reference data is available
+        # add the humidity data + metadata to the dataset
+        if 'q' in ds.variables:
+            # add units, krypton metadata (height and serial number)
+            ds.attrs['krypton serial number'] = krypton_SN[loc]
+            ds.attrs['krypton height'] = krypton_height[loc]
+            ds.q.attrs = {'units': 'kg/kg',
+                          'info': 'Specific humidity, converted from Krypton voltage'}
+            ds.e_1h.attrs = {'units': 'Pa',
+                             'info': 'Hourly average of vapor pressure, calculated from pressure, temperature and humidity'}
+            ds.rho_wv_1h.attrs = {'units': 'g/m^3',
+                                'info': 'Hourly average of water vapor density'}
+            ds.rho_air_1h.attrs = {'units': 'g/m^3',
+                                   'info': 'Hourly average of air density'}
 
     print('\n \n', ds)
-    
