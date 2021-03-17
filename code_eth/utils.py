@@ -40,22 +40,56 @@ def make_time_arrays(init_time, freq):
 
 
 def get_reference_data(path, loc, fname, time_index):
-    # get reference data, stored in 30 min intervals
+    '''
+    If available, get reference data, stored in 30 min intervals. There are six
+    variables, 2 entries per hour, in each file: local temperature, local rh,
+    reference pressure and reference temperature: the reference values are
+    measured at the Bosco di Sotta station. Two more columns hold rain and net
+    radiation data which we don't need here.
+
+    Reference data is not available for the entire period.
+
+    Parameters
+    ----------
+    path : str
+        path to data
+    loc : str
+        letter denoting the sonic location
+    fname : str
+        filename: full path to the file where high frequency data is stored.
+        The name pattern of reference data corresponds to the name of the
+        reference data.
+    time_index : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    ref_data : TYPE
+        DESCRIPTION.
+
+    '''
+
     # get a reference file corresponding to the high frequency variables
     file_ref = os.path.join(path, 'ref', loc,
                             '{}.ref'.format(os.path.splitext(fname)[0]))
-    # load data, name columns
-    # p_ref and t_ref are measured only at Bosco di Sotta and used to calculate
-    #   pressure at all other stations, based on the altitude difference
-    ref_data = pd.read_csv(file_ref,
-                           sep='\s+',
-                           usecols=[0, 1, 2, 3],
-                           names=['t', 'rh', 'p_ref', 't_ref'])
-    # set index of reference data to the timestamp they correspond to
-    ref_data.index = time_index.values
-    # add local pressure data
-    ref_data['p'] = get_local_pressure(loc, ref_data.t_ref, ref_data.p_ref)
-    return ref_data
+
+    # if the file exists, load it and extract reference data
+    if os.path.exists(file_ref):
+        # load data, name columns
+        # p_ref and t_ref measured only at Bosco di Sotta, used to calculate
+        #   pressure at all other stations, based on the altitude difference
+        ref_data = pd.read_csv(file_ref,
+                               sep='\s+',
+                               usecols=[0, 1, 2, 3],
+                               names=['t', 'rh', 'p_ref', 't_ref'])
+        # set index of reference data to the timestamp they correspond to
+        ref_data.index = time_index.values
+        # add local pressure data
+        ref_data['p'] = get_local_pressure(loc, ref_data.t_ref, ref_data.p_ref)
+        return ref_data
+    # if the corresponding reference file does not exist, return None
+    else:
+        return None
 
 
 def get_hourly_vars(df):
@@ -86,6 +120,58 @@ def get_hourly_vars(df):
     e_h, rho_wv_h, rho_air_h = get_e_and_rho(t_h, rh_h, p_h)
 
     return t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h
+
+
+def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min, date, loc, ref_data):
+    # convert u, v, w from cm/s to m/s
+    arr[:, [0, 1, 2]] = arr[:, [0, 1, 2]] / 100.0
+    # convert speed of sound to temperature (in Kelvin)
+    arr[:, 3] = get_temperature(arr[:, 3], ref_data)
+    # Information about how temperature was calculated
+    T_info = 'Temperature calculated with the use of reference data, taking into account pressure and humidity.'
+
+    # Data variables to make the dataset
+    data_vars = dict(u=('time', arr[:, 0]),
+                     v=('time', arr[:, 1]),
+                     w=('time', arr[:, 2]),
+                     T=('time', arr[:, 3]),
+                     T_30min=('time_30min', ref_data.t),
+                     rh_30min=('time_30min', ref_data.rh),
+                     p_30min=('time_30min', ref_data.p))
+    coords = dict(time=timerange_full,
+                  time_30min=timerange_30min,
+                  time_1h=date)
+    
+    # if krypton is present, calculate also humidity
+    if (loc in ['A', 'C', 'F']):
+        # from krypton voltage calculate humidity, add it to the data set
+        voltage = arr[:, 4]
+        # get necessary variables at hourly resolution
+        t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h = get_hourly_vars(ref_data)
+        # calculate specific humidity
+        q = get_humidity(loc, voltage, rho_air_h, rho_wv_h)
+        # add humidity q to the data_vars dictionary
+        data_vars['q'] = ('time', q)
+        
+    return data_vars, coords, T_info
+
+
+def prepare_ds_no_ref_data(arr, timerange_full, date):
+    # convert u, v, w from cm/s to m/s
+    arr[:, [0, 1, 2]] = arr[:, [0, 1, 2]] / 100.0
+    # convert speed of sound to temperature (in Kelvin)
+    arr[:, 3] = get_temp_simplified(arr[:, 3])
+    # Information about how temperature was calculated
+    T_info = 'Temperature calculated WITHOUT reference data, only from speed of sound.'
+
+    # Data variables to make the dataset
+    data_vars = dict(u=('time', arr[:, 0]),
+                     v=('time', arr[:, 1]),
+                     w=('time', arr[:, 2]),
+                     T=('time', arr[:, 3]))
+    coords = dict(time=timerange_full,
+                  time_1h=date)
+    return data_vars, coords, T_info
 
 
 def get_krypton_calibration(loc, ln_V_mean, rho_hourly):

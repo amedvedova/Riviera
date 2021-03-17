@@ -16,7 +16,8 @@ import os
 # local imports
 from utils import make_namestrings, make_time_arrays, get_reference_data, \
                   get_hourly_vars, get_temperature, get_temp_simplified, \
-                  get_humidity
+                  get_humidity, prepare_ds_with_ref_data, \
+                  prepare_ds_no_ref_data
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl, krypton_SN, krypton_height
 
@@ -36,7 +37,7 @@ fs = [f for f in os.listdir()if '.SLT' in f]
 
 # loop through all files, read out and store the useful data file by file
 # for filename in files_all:
-for filename in sorted(fs)[0:3]:
+for filename in sorted(fs)[0:4]:
 
     # get only the filename within the folder, without the full path
     fname = os.path.split(filename)[1]
@@ -46,13 +47,6 @@ for filename in sorted(fs)[0:3]:
 
     # make a range of time values: use fixed time periods
     timerange_full, timerange_30min = make_time_arrays(date, freq)
-
-    # get reference data, stored in 30 min intervals
-    # has rh, temperature and pressure - needed to get specific humidity and
-    # vapor pressure
-    ref_data = get_reference_data(path, loc, fname, timerange_30min)
-    # get hourly averages
-    t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h = get_hourly_vars(ref_data)
 
     # open file for reading (r)
     fopen = open(filename, 'r')
@@ -81,32 +75,37 @@ for filename in sorted(fs)[0:3]:
     arr = np.pad(arr, ((0, 75000-arr.shape[0]), (0, 0)),
                  'constant', constant_values=np.nan)
 
-    # convert u, v, w from cm/s to m/s
-    arr[:, :3] = arr[:, :3] / 100.0
-    # convert speed of sound to temperature (in Kelvin)
-    arr[:, 3] = get_temperature(arr[:, 3], ref_data)
+    # get reference data, stored in 30 min intervals
+    # if available, the file stored has rh, temperature and pressure - needed
+    # to get specific humidity and vapor pressure. If not available: None.
+    ref_data = get_reference_data(path, loc, fname, timerange_30min)
 
-    # make an xarray dataset for u, v, w, T with time as the coordinate
-    # columns 0,1, 2: convert cm/s to m/s
-    # column 3: convert speed ouf sound to temperature
-    ds = xr.Dataset(data_vars=dict(u=('time', arr[:, 0]),
-                                   v=('time', arr[:, 1]),
-                                   w=('time', arr[:, 2]),
-                                   T=('time', arr[:, 3]),
-                                   T_30min=('time_30min', ref_data.t),
-                                   rh_30min=('time_30min', ref_data.rh),
-                                   p_30min=('time_30min', ref_data.p)
-                                   ),
-                    coords=dict(time=timerange_full,
-                                time_30min=timerange_30min,
-                                time_1h=date))
+    # prepare data to make the dataset, based reference data availability
+    # get hourly averages, if available
+    if ref_data is not None:
+        t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h = get_hourly_vars(ref_data)
+        data_vars, coords, T_info = prepare_ds_with_ref_data(arr,
+                                                             timerange_full,
+                                                             timerange_30min,
+                                                             date,
+                                                             loc,
+                                                             ref_data)
+    # If reference data is not available
+    else:
+        data_vars, coords, T_info = prepare_ds_no_ref_data(arr,
+                                                           timerange_full,
+                                                           date)
+
+    # Make dataset
+    ds = xr.Dataset(data_vars=data_vars,
+                    coords=coords)
 
     # Add attributes to the variables
     ds.u.attrs = {'units': 'm/s'}
     ds.v.attrs = {'units': 'm/s'}
     ds.w.attrs = {'units': 'm/s'}
     ds.T.attrs = {'units': 'K',
-                  'info': 'Calculated from speed of sound, using hourly averages of rh and pressure (following the original analysis script)'}
+                  'info': T_info}
 
     # Add general metadata
     ds.attrs['frequency [Hz]'] = freq
@@ -118,23 +117,22 @@ for filename in sorted(fs)[0:3]:
     ds.attrs['sonic location [lat, lon]'] = sonic_latlon[loc]
     ds.attrs['tower altitude [m a.s.l.]'] = height_asl[loc]
 
-    # there's a krypton present, add the humidity data + metadata
-    if loc in ['A', 'C', 'F']:
-        # from krypton voltage calculate humidity, add it to the data set
-        voltage = arr[:, 4]
-        q = get_humidity(loc, voltage, rho_air_h, rho_wv_h)
-        ds['q'] = ('time', q)
+    # there's a krypton present AND reference data is available
+    # add the humidity data + metadata to the dataset
+    if 'q' in ds.variables:
         # add units, krypton metadata (height and serial number)
         ds.q.attrs = {'units': 'kg/kg'}
         ds.attrs['krypton serial number'] = krypton_SN[loc]
         ds.attrs['krypton height'] = krypton_height[loc]
 
-    # Add 30 min variable metadata
-    ds.T_30min.attrs = {'units': 'K',
-                        'info': 'Loaded from reference file'}
-    ds.rh_30min.attrs = {'units': '%',
-                         'info': 'Loaded from reference file'}
-    ds.p_30min.attrs = {'units': 'hPa',
-                        'info': 'Calculated from the reference pressure and temperature in the reference file'}
+    if ref_data is not None:
+        # Add 30 min variable metadata
+        ds.T_30min.attrs = {'units': 'K',
+                            'info': 'Loaded from reference file'}
+        ds.rh_30min.attrs = {'units': '%',
+                             'info': 'Loaded from reference file'}
+        ds.p_30min.attrs = {'units': 'hPa',
+                            'info': 'Calculated from the reference pressure and temperature in the reference file'}
 
-    # print(loc, date, arr.shape, timerange_full[-1])
+    print('\n \n', ds)
+    
