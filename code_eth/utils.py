@@ -16,13 +16,14 @@ def make_namestrings(fname):
     loc = fname[0]       # sonic identification letter
     DoY = fname[1:4]     # day of year
     hh = fname[4:6]      # hour of day
+    mm = fname[6:8]      # minutes of hour
 
     # get the date+time in a proper datetime format
-    datestring = '1999-{}-{}'.format(DoY, hh)
-    date = pd.to_datetime(datestring, format='%Y-%j-%H')
+    datestring = '1999-{}-{}{}'.format(DoY, hh, mm)
+    date = pd.to_datetime(datestring, format='%Y-%j-%H%M')
 
     # create a name for the output file: location + date + time
-    output_name = '{}_{}.nc'.format(loc, date.strftime('%Y_%m_%d_%H%M'))
+    output_name = '{}-{}.nc'.format(loc, date.strftime('%Y%m%d-%H%M'))
 
     return loc, date, output_name
 
@@ -138,7 +139,7 @@ def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min,
                      T=('time', arr[:, 3]),
                      T_30min=('time_30min', ref_data.t),
                      rh_30min=('time_30min', ref_data.rh),
-                     p_30min=('time_30min', ref_data.p))
+                     p_30min=('time_30min', ref_data.p * 100))  # convert to Pa
     coords = dict(time=timerange_full,
                   time_30min=timerange_30min,
                   time_1h=date.to_datetime64())
@@ -151,13 +152,14 @@ def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min,
         t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h = get_hourly_vars(ref_data)
         # calculate specific humidity
         q = get_humidity(loc, voltage, rho_air_h, rho_wv_h)
-        # add humidity q to the data_vars dictionary
+        # add raw voltage and calculated humidity q to the data_vars dictionary
+        data_vars['voltage'] = ('time', voltage)
         data_vars['q'] = ('time', q)
         # add hourly variables which were used to calculate q
-        data_vars['e_1h'] = ('time_1h', [e_h])           # vapor pressure [Pa] 
+        data_vars['e_1h'] = ('time_1h', [e_h])               # vapor pressure [Pa] 
         data_vars['rho_wv_1h'] = ('time_1h', [rho_wv_h])     # Air density [g/m^3]
-        data_vars['rho_air_1h'] = ('time_1h', [rho_air_h])   # Water vapor density
-        
+        data_vars['rho_air_1h'] = ('time_1h', [rho_air_h])   # Water vapor density [g/m^3]
+
     return data_vars, coords, T_info
 
 
