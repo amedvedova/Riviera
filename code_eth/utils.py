@@ -495,6 +495,8 @@ def get_humidity(loc, voltage, rho_air_hourly, rho_wv_hourly):
     voltage_no_nans = np.nan_to_num(voltage, nan=1)
     # convert negative/zero values to 1: ln(1) = 0
     voltage_no_nans = np.where(voltage_no_nans < 1, 1, voltage_no_nans)
+    # convert faulty voltage over 5000 to 1 as well
+    voltage_no_nans = np.where(voltage_no_nans > 5000, 1, voltage_no_nans)
     # get density at high frequency by indexing the references
     # -1 due to python indexing: voltage=1 corresponds to zeroth rho value
     rho_high_freq = rho_ref[voltage_no_nans.astype('int32')-1]

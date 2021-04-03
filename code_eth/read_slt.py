@@ -2,14 +2,13 @@
 # -*- coding: utf-8 -*-
 
 # Read in .SLT files, add metadata, save as .nc files with metadata
-# Usable only for ETH sonics with sampling frequency of 20.82 Hz
-# there are 7 of these: with labels a, b, c, d, e, f, g (given by ETH)
+# Usable only for ETH sonics with sampling frequency of 20.83 Hz
+# there are 7 of these: with labels a, b, c, d, e, f, g (labels given by ETH)
 # data from sonic h stored in a different format
 
 import numpy as np
 import pandas as pd
 import xarray as xr
-import matplotlib.pyplot as plt
 import glob
 import os
 
@@ -23,8 +22,9 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            krypton_SN, krypton_height, krypton_calibrations
 
 
-# flag to save files
+# flag to save files, output folder
 savefiles = True
+save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/eth_sonics_hourly/'
 
 # path to all data from ETH sonics: sorted in subfolders by day of year
 path = "/home/alve/Desktop/Riviera/MAP_subset/data/eth_sonics"
@@ -35,26 +35,27 @@ files_all = sorted(glob.glob(os.path.join(path, '**/F*.SLT')))
 # some data files contain fewer points, but all at least 73500
 freq = 75000 / 60 / 60    # 20.833 Hz
 
-
-# TODO temporary: for trying out data analysis
-# files_all = files_all[:15]
-fs = [f for f in os.listdir()if '.SLT' in f]
-
 # loop through all files, read out and store the useful data file by file
-# for filename in files_all:
-for filename in sorted(fs)[:-2]:
+for filename in files_all:
 
     # get only the filename within the folder, without the full path
     fname = os.path.split(filename)[1]
-    print(fname)
 
     # get location (sonic letter), initial time of file, name for saving output
     loc, date, output_name = make_namestrings(fname)
 
+    # if .nc files were already created, skip doing that again
+    # if savefiles:
+    #     if output_name in os.listdir(save_folder):
+    #         continue
+
+    # For debigging and seeing conversion progress
+    print(date, filename)
+
     # make a range of time values: use fixed time periods
     timerange_full, timerange_30min = make_time_arrays(date, freq)
 
-    # open file for reading (r)
+    # open file for reading ('r' flag)
     fopen = open(filename, 'r')
     # read SLT data into one vector
     arr = np.fromfile(fopen, dtype=np.int16)
@@ -77,6 +78,9 @@ for filename in sorted(fs)[:-2]:
     # first line is a useless header: get rid of it
     arr = arr[1:, :]
 
+    # if the array is too long (case for only 2 files: length 75240) - cut it
+    if arr.shape[0] > 75000:
+        arr = arr[:75000, :]
     # pad array to length 750000 (full hour)
     arr = np.pad(arr, ((0, 75000-arr.shape[0]), (0, 0)),
                  'constant', constant_values=np.nan)
@@ -126,6 +130,18 @@ for filename in sorted(fs)[:-2]:
     ds.attrs['sonic location [lat, lon]'] = sonic_latlon[loc]
     ds.attrs['tower altitude [m a.s.l.]'] = height_asl[loc]
 
+    # if voltage data is available, add it to the dataset
+    if arr.shape[1] > 4:
+        voltage = arr[:, 4]
+        ds = ds.assign({'voltage': ('time', voltage)})
+        ds.attrs['krypton serial number'] = krypton_SN[loc]
+        ds.attrs['krypton height'] = krypton_height[loc]
+        ds.voltage.attrs = {'units': 'mV',
+                            'info': 'raw voltage used to calculate humidity, see the "calibration_coeffs" attribute',
+                            'calibration_coeffs': krypton_calibrations[loc],
+                            'calibration_coeffs_info': 'Calibration coefficients for the given Krypton, in the order:     [B0, B1, B2, k_w_dry, k_w_wet, ln_V0_dry, ln_V0_wet, tube_separation_x]'}
+
+
     # add reference data if it exists its metadata, if available also humidity
     if ref_data is not None:
         # Add 30 min variable metadata
@@ -139,12 +155,6 @@ for filename in sorted(fs)[:-2]:
         # add the humidity data + metadata to the dataset
         if 'q' in ds.variables:
             # add units, krypton metadata (height and serial number)
-            ds.attrs['krypton serial number'] = krypton_SN[loc]
-            ds.attrs['krypton height'] = krypton_height[loc]
-            ds.voltage.attrs = {'units': 'mV',
-                                'info': 'raw voltage used to calculate humidity, see the "calibration_coeffs" attribute',
-                                'calibration_coeffs': krypton_calibrations[loc],
-                                'calibration_coeffs_info': 'Calibration coefficients for the given Krypton, in the order:     [B0, B1, B2, k_w_dry, k_w_wet, ln_V0_dry, ln_V0_wet, tube_separation_x]'}
             ds.q.attrs = {'units': 'kg/kg',
                           'info': 'Specific humidity, converted from Krypton voltage using the original conversion script'}
             ds.e_1h.attrs = {'units': 'Pa',
@@ -158,54 +168,4 @@ for filename in sorted(fs)[:-2]:
         ds.attrs['reference data'] = 'Not available; temperature had to be calculated with a simplified formula, humidity data not available or cannot be caculated.'
 
     if savefiles:
-        ds.to_netcdf(output_name)
-
-
-# %%
-
-# filename = sorted(fs)[-2]
-
-# # get only the filename within the folder, without the full path
-# fname = os.path.split(filename)[1]
-
-# # get location (sonic letter), initial time of file, name for saving output
-# loc, date, output_name = make_namestrings(fname)
-
-# # make a range of time values: use fixed time periods
-# timerange_full, timerange_30min = make_time_arrays(date, freq)
-
-# # open file for reading (r)
-# fopen = open(filename, 'r')
-# # read SLT data into one vector
-# arr = np.fromfile(fopen, dtype=np.int16)
-# # change type to support more precision
-# arr = arr.astype(np.float64)
-
-# # get the number of columns in data:
-# channels = 7
-
-# # reshape the data array:
-# arr = np.reshape(arr, (-1, channels))
-# # first line is a useless header: get rid of it
-# arr = arr[1:, :]
-
-# # pad array to length 750000 (full hour)
-# arr = np.pad(arr, ((0, 75000-arr.shape[0]), (0, 0)),
-#              'constant', constant_values=np.nan)
-
-# # get reference data, stored in 30 min intervals
-# ref_data = get_reference_data(path, loc, fname, timerange_30min)
-
-# # prepare data to make the dataset, based reference data availability
-# data_vars, coords, T_info = prepare_ds_with_ref_data(arr,
-#                                                      timerange_full,
-#                                                      timerange_30min,
-#                                                      date,
-#                                                      loc,
-#                                                      ref_data)
-# # Make dataset
-# # ds = xr.Dataset(data_vars=data_vars,
-# #                 coords=coords)
-# ds = xr.Dataset(coords=coords)
-# ds = ds.expand_dims('time_1h')
-# ds = ds.assign(data_vars)
+        ds.to_netcdf(os.path.join(save_folder, output_name))
