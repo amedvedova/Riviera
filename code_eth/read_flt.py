@@ -8,20 +8,17 @@
 import numpy as np
 import pandas as pd
 import xarray as xr
-import matplotlib.pyplot as plt
 import glob
 import os
 
 # local imports
-from utils import make_namestrings, make_time_arrays, \
-                  get_temperature, get_temp_simplified, \
-                  prepare_ds_no_ref_data
+from utils import make_namestrings
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl, krypton_SN, krypton_height
 
 
 # flag to save files
-savefiles = False
+savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/eth_sonics_hourly/'
 
 # path to all data from ETH sonics: sorted in subfolders by day of year
@@ -33,12 +30,11 @@ files_all = sorted(glob.glob(os.path.join(path, '**/H*.flt')))
 freq = 10    # [Hz]
 
 # TODO temporary: for trying out data analysis
-# files_all = files_all
-fs = [f for f in os.listdir() if '.flt' in f]
+# fs = [f for f in os.listdir() if '.flt' in f]
 
 # loop through all files, read out and store the useful data file by file
 # for filename in files_all:
-for filename in sorted(fs):
+for filename in files_all:
 
     # get only the filename within the folder, without the full path
     fname = os.path.split(filename)[1]
@@ -90,7 +86,7 @@ for filename in sorted(fs):
 
     # # Add general metadata
     ds.attrs['frequency [Hz]'] = freq
-    ds.attrs['info'] = ' No reference data available; no other conversions were necessary for files from this location.'
+    ds.attrs['info'] = 'No reference data available; no other conversions were necessary for files from this location.'
 
     # # sonic metadata
     ds.attrs['sonic tower and level'] = sonic_location[loc]
@@ -98,6 +94,17 @@ for filename in sorted(fs):
     ds.attrs['sonic height [m]'] = sonic_height[loc]
     ds.attrs['sonic location [lat, lon]'] = sonic_latlon[loc]
     ds.attrs['tower altitude [m a.s.l.]'] = height_asl[loc]
+
+    # If humidity data is available:
+    if arr.shape[1] > 4:
+        # add humidity and metadate
+        humidity = arr[:, 4]
+        ds = ds.assign({'q': ('time', humidity)})
+        ds.q.attrs = {'units': '?',
+                      'info': 'The original data had no metadata about humidity. The database of MAP-Riviera 30 min data does not contain data from this krypton at all.'}
+        # add krypton metadata
+        ds.attrs['krypton serial number'] = krypton_SN[loc]
+        ds.attrs['krypton height'] = krypton_height[loc]
 
     if savefiles:
         ds.to_netcdf(os.path.join(save_folder, output_name))
