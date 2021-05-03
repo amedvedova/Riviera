@@ -140,9 +140,29 @@ def uvwt_from_file(file, count):
 
 
 def ds_from_uvwt(uvwt_full, date):
+    """
+    Covnvert the np data array to a dataset containing metadata
+
+    Parameters
+    ----------
+    uvwt_full : np.array
+    date : Timestamp
+        timestamp of the beginning of the measurement period
+
+    Returns
+    -------
+    ds : xr.Dataset
+
+
+    """
     # if the full field contains a few points more than 36000, cut those
     #   if there are fewer points, nothing happens
     uvwt = uvwt_full[:36000, :]
+
+    # on the other hand, pad to 36000 for shorter files
+    uvwt = np.pad(uvwt, ((0, 36000-uvwt.shape[0]), (0, 0)),
+                  'constant', constant_values=np.nan)
+
     # make a dictinary of variables
     data_vars = dict(u=('time', uvwt[:, 0]),
                      v=('time', uvwt[:, 1]),
@@ -151,7 +171,7 @@ def ds_from_uvwt(uvwt_full, date):
     # make a range of time values: use fixed time periods
     timerange_full = pd.date_range(date,
                                    freq=str(1/freq)+'S',
-                                   periods=uvwt.shape[0])
+                                   periods=36000)
     # define coordinates
     coords = dict(time=timerange_full)
 
@@ -217,12 +237,10 @@ for f_raw in f_raw_all:
             output_name = '{}_{}.nc'.format(loc, date.strftime('%Y_%m_%d_%H%M'))
             # save file
             ds.to_netcdf(os.path.join(save_folder, output_name))
-        
 
 
-        
-fig, axes = plt.subplots(nrows=2, ncols=2, figsize=[12,12])
-axes = axes.flatten()
-for i in range(4):
-    axes[i].plot(uvwt[:, i])
-fig.show()
+# fig, axes = plt.subplots(nrows=2, ncols=2, figsize=[12,12])
+# axes = axes.flatten()
+# for i in range(4):
+#     axes[i].plot(uvwt[:, i])
+# fig.show()
