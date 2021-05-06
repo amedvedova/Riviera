@@ -1,0 +1,9 @@
+MAP Uni Basel: naming conventions for locations/towers
+
+KT : Kerbtal Tea     ("Kerb") neuderdings "CENSO"
+MN : Monte Nuovo     ("Birke")
+MA : Maruso          ("Maruso Young")
+RO : Maruso-Roasco   ("Maruso Sodar")
+AD : Alpe Domàs      ("Lawine")
+AM : Alpe di Motto   
+AG : Alpe di Gagèrn  ("Krete")

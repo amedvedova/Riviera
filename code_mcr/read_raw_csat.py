@@ -37,7 +37,7 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
 count_threshold = 35000
 
 # flag to save files, folder to which files will be saved
-savefiles = True
+savefiles = False
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
 # path to data from the MCR sonics at "mn" location
@@ -45,15 +45,16 @@ path = "/home/alve/Desktop/Riviera/MAP_subset/data/mn/rohdaten/fast"
 
 # list N1/N3 .raw and files in all subfolders (day of year)
 # N1/N3 refers to levels where CSAT3 sonics were used
-files_N1 = sorted(glob.glob(os.path.join(path, '**/MN_N1_*.raw')))
-files_N3 = sorted(glob.glob(os.path.join(path, '**/MN_N3_*.raw')))
+files_mn_N1 = sorted(glob.glob(os.path.join(path, '**/MN_N1_*.raw')))
+files_mn_N3 = sorted(glob.glob(os.path.join(path, '**/MN_N3_*.raw')))
 
 # frequency of CSAT3 sonics
 freq = 20
 
 # concatenate the two lists
 # TODO process all files, not only a subset
-f_raw_all = files_N1[:10] + files_N3[:10]
+f_raw_all = files_mn_N1[:10] + files_mn_N3[:10]
+f_raw_all = files_mn_N1 + files_mn_N3
 
 
 # %% Function definitions
@@ -187,6 +188,18 @@ def ds_from_uvwt(uvwt_full, date):
     return ds
 
 
+def floor_30min(time):
+    # TODO
+    """
+    calculate dt
+    subtract
+    get index of orignal time
+    return index - use this later for padding
+    """
+    time_rounded = None
+    return time_rounded
+
+
 def info_from_filename(file):
     # filename
     filename = os.path.split(file)[1]
@@ -194,6 +207,8 @@ def info_from_filename(file):
     datestring = filename[6:-4]
     # proper timestamp denoting when the file begins
     date = pd.to_datetime(datestring, format='%Y_%j_%H%M%S')
+    # TODO round down to 30 min
+    # https://stackoverflow.com/questions/32723150/rounding-up-to-nearest-30-minutes-in-python
 
     # get level of the sonic: either 1 (N1) or 2 (N3)
     if filename[3:5] == 'N1':
@@ -205,7 +220,7 @@ def info_from_filename(file):
 
 
 # %%
-
+counter = 0
 for f_raw in f_raw_all:
     with open(f_raw, 'rb') as file:
         # get location and time of file
@@ -215,6 +230,12 @@ for f_raw in f_raw_all:
         # get count of measurements: (size/10)-1 since each measurement is
         # 10 bytes and the first measurement is corrupt
         count = int((size / 10) - 1)
+        if count < 32400: 
+            print('{} - {} - datapoints: {}'.format(date, f_raw[-14:-11], count))
+            counter += 1
+            continue
+        else:
+            continue
         # TODO ask Iva: if a lot of data is missing, skip file
         if count <= count_threshold:
             continue
@@ -230,6 +251,7 @@ for f_raw in f_raw_all:
         ds.attrs['sonic height [m]'] = sonic_height[loc]
         ds.attrs['sonic location [lat, lon]'] = sonic_latlon[loc]
         ds.attrs['tower altitude [m a.s.l.]'] = height_asl[loc]
+        ds.time.attrs['info'] = 'time in CET'
 
         # save data
         if savefiles:
@@ -238,7 +260,7 @@ for f_raw in f_raw_all:
             # save file
             ds.to_netcdf(os.path.join(save_folder, output_name))
 
-
+print('Counter: {}'.format(counter))
 # fig, axes = plt.subplots(nrows=2, ncols=2, figsize=[12,12])
 # axes = axes.flatten()
 # for i in range(4):

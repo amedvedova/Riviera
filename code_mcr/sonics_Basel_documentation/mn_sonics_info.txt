@@ -1,0 +1,100 @@
+Alle Zeiten MEZ
+Zeitkontrolle PIP 02 MN
+
+Datum    Funkuhrzeit  PIP-Zeit	 PIP-Zeit korrigiert?
+------------------------------------------------------------------
+07.08.99 18:26:35     18:26:26   ja
+15.08.99 18:37:00     18:36:56   ja
+28.08.99 11:25:00     11:24:48   ja 
+30.08.99 12:47:20     12:47:16   ja
+01.09.99 11:52:00     11:51:57.5 ja
+02.09.99 09:32:40     09:32:37   ja
+07.09.99 14:43:30     14:43:14   ja
+08.09.99 12:26:30     12:26:26.5 ja
+10.09.99 11.54.59     11.54.53   ja
+11.09.99 12:30:50     12:30:45   ja
+12.09.99 08:13:10     08:13:07.5 ja
+14.09.99 09:45:20     09:45:13   ja
+16.09.99 10:11:50     10:11:43.5 ja 
+17.09.99 09:20:00     09:19:57   ja 
+21.09.99 08:44:20     08:44:17   ja
+23.09.99 10:16:00     10:15:53   ja
+28.09.99 11:51:40     11:51:36.5 ja
+29.09.99 10:42:55     10:42:53   ja
+31.09.99 09:11:59     09:11:53   ja
+02.10.99 08:36:10     08:36:05   ja
+03.10.99 10.29.50     10.29.45   ja
+07.10.99 12:39:40     12:39:35.5 ja
+
+Hinweise
+--------
+02.09.99 09:22.00 Sonic N4 durch Spinnennetz verschmutzt. Spinnennetz entfernt.
+21.09.99 08:00:00 CSAT3's funktionieren nicht. Reeboot um 08:12 (unteres) und rund 08:32 MEZ (oberes). 
+21.09.99 08:12:00 !! GADC (Grösstes anzunehmendes Datenchaos): Festgestellt, dass Stecker von N1 und N3 vertauscht waren (COM 1 mit oberem und COM 2 mit unterem CSAT verbunden)! D.h. Datenfiles von N1 sind in Wirklichkeit von N3 und N3er von N1! zu blöd, alles schon auf cd-rom! Zwar kein Datenverlust, aber komplizierteres Handling. (vertauschung muss seit CSAT-Test sein, zuvor war zuordnung richtig). Unbedingt kontrollieren seit wann und log-files entsprechend anpassen bzw. dokumentieren...
+
+Zeitkontrolle 21x MN_PT
+
+Datum    Funkuhrzeit/DOY/Y  21x-Zeit/DOY/Y      21x-Zeit korrigiert?
+------------------------------------------------------------------
+07.08.99 18:29:30 219 99    02:43:15    192 90  ja
+15.08.99 ausser Betrieb                         ja
+28.08.99 11:36:00 240 99    11:36:12    240 99  ja
+30.08.99 11:47:00 242 99    (zeit verloren)     ja
+02.09.99 um 1 std zurückgesetzt (war    MESZ)   ja
+14.09.99 09:50:00 257 99    09:50:08    257 99  ja
+17.09.99 09:24:00 260 99    09:24:05.5  260 99  ja
+21.09.99 08:35:00 264 99    +1sec               nein
+23.09.99 um 09:30 266 99    +1sec               ? (siehe Eva's Buch)
+27.09.99 abends                                 ja
+28.09.99 11:56:00 271 99    11:55:59    271 99  nein
+28.09.99 10:46:00 272 99    10:45:59    272 99  ja
+31.09.99 09:07.00 274 99    09.06.59    274 99  ja
+05.10.99 09.40.00 279 99    09.39.56   279 99  ja     
+
+05.10.99 09.38.35 279 99    09.38.42    279 99  ja
+Zeitkontrolle CR10 MN_WV
+
+Datum    Funkuhrzeit/DOY/Y  CR10-Zeit/DOY/Y    CR10-Zeit korrigiert?
+------------------------------------------------------------------
+07.08.99 CR10 ausser Betrieb
+15.08.99 CR10 ausser Betrieb                   ja
+28.08.99 11:39:14 240 99    11:39:13   240 99  nein
+30.08.99 11:50:00           (zeit verloren)    ja
+02.09.99 um 1 std zurückgesetzt (war MESZ)     ja
+14.09.99 09:52:30 257 99    09:52:29   257 99  nein
+17.09.99 09:27:30 260 99    09:27:29.5 260 99  nein
+21.09.99 08:35:00 264 99    -0sec              nein
+23.09.99 um 09:30 266 99    -1sec              ? (siehe Eva's Buch)
+28.09.99 12:01:00 271 99    01:14:00   000 09  ja
+29.09.99 10:47:05 272 99    10:47:55   272 99  nein
+31.09.99 09.07.00 274 99    09.06.59   274 99  ja
+05.10.99 09.40.00 279 99    09.39.56   279 99  ja     
+Zeitkontrolle 23x MN_TC
+
+Datum    Funkuhrzeit/DOY/Y  23x-Zeit/DOY/Y     23x-Zeit korrigiert?
+------------------------------------------------------------------
+28.08.99 11:33:14 240 99    11:33:12   240 99  ja
+30.08.99 11:52:00 242 99    11:52:00.5 240 99  nein 
+01.09.99 11:56:40 244 99    11:56:41   244 99  ja 
+02.09.99 09:30:00 245 99    09:30:00   245 99  nein 
+08.09.99 12:29:42 251 99    12:29:41.5 251 99  nein 
+10.09.99 12:31:00 254 99    12:30:59.5 254 99  ja
+12.09.99 08:13:00 255 99    08:13:00   255 99  nein
+14.09.99 09:47:30 257 99    09:47:29.5 257 99  ja
+16.09.99 10:14:40 259 99    10:14:39.5 259 99  ja
+17.09.99 09:11:10 260 99    09:11:09.7 260 99  nein
+21.09.99 08:48:37 264 99    08:48:36.5 264 99  ja
+23.09.99 um 09:30 266 99    -1sec              ja
+28.09.99 11:43:40 271 99    11:43:41           ja   
+29.09.99 10:44:00 272 99    10:44:00   272 99  nein
+30.09.99 10:25:20 273 99    -0.5 sec                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  31.09.99 09:07:15 274 99    -1   sec           ja                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               03.10.99 10.17.00 277 99    -2.5 sec           ja                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               06.10.99 08:30:00 279 99     0   sec           nein   
+07.10.99 09:40:10 280 99    -1.5 sec           ja                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+
+Laubfall
+
+Datum    %Gefallen  %Boden mit Laub bedeckt  Bemerkungen     
+-----------------------------------------------------------------------------------------------------------------
+21.09.99 25%        50%                      Grösstenteils noch gruene Blätter, Laubfallbeginn seit rund 10 Tagen    
+23.09.99 25%        50%                      Verfärbungsanteil hängender Blätter intensiver 
+28.09.99 40%        70%                      Einiges Laub mehr gefallen
+07.10.99 55%        90%                      Wald licht. 

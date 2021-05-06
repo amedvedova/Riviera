@@ -1,0 +1,445 @@
+1.
+
+Es wird fuer jede Stunde und jeden Tag zwischen dem 15. August 1999 (Tag 227 00:30) und 
+dem 28. Oktober 1999 (Tag 301 09:00) ein Referenzfile geschrieben. Jedes Referenzfile
+enthaelt pro Halbstunde die Variablen t(x),rh(x),p1,t1,P und NET. x steht fuer das
+Niveau eines auszuwaehlenden Messturms. 
+
+1.1 Temperatur, rel. Feuchte und Druck
+
+A bis D
+
+Die Temperatur t(x), die relative Feuchte rh(x), der Druck p1 und die Temperatur t1
+werden fuer die A bis D allesamt aus dem File daten/mk-files/calcio.txt (Tag 224 bis
+Tag 315) ausgelesen.
+Das Ausgabeformat dieses Files weist mehrere Aenderungen und Unterbrueche in der
+Zeitreihe auf. Deshalb wurde eine Unterteilung des calcio-File in mehrere Bloecke
+notwendig, welche mit folgenden Programmen ausgelesen worden sind (Tab. 1):
+
+
+Tabelle 1
+
+Tag	Zeit	bis 	Tag	Zeit	Auslese-Programm
+
+224	01:00		236	10:30	mkfil_224_236.f
+236	11:00		260	09:30	mkfil_236_260.f
+260	12:00		270	07:30	mkfil_260_270.f
+271	13:00		280	14:30	mkfil_271_280.f
+280	16:00		281	16:00	mkfil_280_281.f
+284	09:00		301	12:00	mkfil_284_301.f
+
+
+Vor allem zwischen den Tagen 281 und 284 und den Tagen 270 7:30 und 271 13:00
+existieren grosse Zeitluecken der Variablen t(x),rh(x) und t1.
+
+Die fehlenden Druckwerte zwischen den einzelnen Bloecken und zwischen den Tagen 224
+und 236 wurden mit den stuendlichen Druckmessungen der ANETZ-Station Locarno-Magadino
+(LOMA) berechnet: Ein Vergleich der Zeitreihen des Druckes in LOMA und bei Sonic A
+(calcio) zwischen den Tagen 284 und 301 zeigt, dass der Druck in LOMA praktisch
+immer um 5 mbar groesser als beim Sonic A ist (check_press.f und daten/loma/press_224_301.dat).
+Mit den umgerechneten Druckwerten von LOMA kann der fehlende Druck von Sonic A somit
+berechnet werden.
+
+Mit den sechs Ausleseprogrammen in Tab. 1 werden die Variablen t1,t2,t3,t4,t5,
+t6,rh1,rh2,rh3,rh4,rh5,rh6 und p1 blockweise in separate Files geschrieben. Diese
+werden spaeter zusammengenommen und in ein File /marco/daten/ref/zeitreihe/all_referenz.dat
+geschrieben. Die Kalibrierung der Temperaturen und der rel. Feuchte erfolgt erst spaeter.
+
+E bis G
+
+Fuer E, F und G werden p1 und t1 gleich wie unter 1.1 berechnet. Hingegen werden t2
+bis t6 und rh2 bis rh6 aus einem binaeren Datensatz gewonnen, indem die in 21Hz
+gemessenen t(x) und rh(x) mit dem Programm readbinary.f auf 30-Minuten-Werte gemittelt werden.
+Gleichzeitig werden die "alten" Referenzfiles, bei denen t(x) und rh(x) noch aus dem
+calcio.txt-Datensatz berechnet worden sind, eingelesen und mit den aktuellen t(x) und
+rh(x) ergaenzt. Die alten t(x) und rh(x) werden dabei ueberschrieben.
+
+Die erwaehnten Zeitluecken fuer A bis G werden mit den entsprechenden Variablen der Zeitreihe
+von LOMA ergaenzt und auf die entsprechenden Niveaus kalibriert (die dat-Files in /daten/loma enthalten die Temperatur- und rel. Feuchten-Werte von LOMA waehrend den oben genannten Zeitluecken):
+
+Zuerst wird die LOMA-Zeitreihe fuer A, B, C, D, E, F und G mit verschiedenen Programmen ausgelesen und die Werte auf die entsprechenden Niveaus kalibriert. Dabei werden fuer die Tage 270 bis 271, bzw. 281 bis 284 die Programme reada-g.f, bzw. reada-g281.f benutzt. Die dabei erzeugten Output-Files sind als /daten/loma/a-g_trhloma270/281.dat abgespeichert.
+Mit den Programmen a-gread270.f, bzw. a-gread281.f werden die halbstuendlichen Temperatur- und rel. Feuchte-Werte dieser erzeugten Output-Files ausgelesen (z.B. am Tag 270 16:00). Zum
+gleichen Zeitpunkt werden von den bestehenden Referenzfiles (z.B. A2701600.ref ) nur die
+bestehenden halbstuendlichen Druck-, Niederschlags- und Nettostrahlungswerte um 16:00 und 16:30
+herausgelesen.
+
+Somit werden fuer die neuen Referenzfiles fuer A bis D nur die neuen t(x), rh(x) und t1
+der LOMA-Zeitreihe und die bestehenden Druck-, Niederschlag- und Nettostrahlungswerte der Referenzfiles beruecksichtigt.
+Fuer die Referenzfiles fuer E bis G wird von LOMA nur t1 benoetigt. Die uebrigen Variablen
+in den Referenzfiles werden nicht ersetzt.
+Diese sechs Variablen werden in ein neues Referenzfile (z.B. A2701600.ref) geschrieben.
+
+1.2 Niederschlag P und Nettostrahlung NET
+
+Der Niederschlag und die Nettostrahlung werden am Standort Calcio, Teleskop und
+Rebberg im Halbstunden- oder Stunden-Intervall gemessen, sodass die Originalfiles in mehrere
+Bloecke unterteilt werden muessen (Tab. 2 und 4). Die verschiedenen Files, die durch die
+Zerstueckelung der Originalfiles entstehen, sind als dat-Files in daten/calcio,
+daten/rebberg und daten/teleskop abgespeichert und mit den in Tab. 2 und 4 erwaehnten
+Programmen wird der Niederschlag und die Nettostrahlung ausgelesen. 
+
+
+1.2.1 Niederschlag
+
+Die Zeitreihen des Niederschlages vom Standort Teleskop (Originaldatei: 
+daten/teleskop/maptele.dat) weisen praktisch keine Luecken auf. Hingegen zeigen sich
+fuer Rebberg (Originaldatei: daten/rebberg/maprebe.dat) zwischen dem Tag 270 13:30 und
+271 11:00 Messluecken, welche mit Fehlwerten -999 ersetzt werden. Die Niederschlag-Zeitreihe
+(Originaldatei: daten/calcio/clarobf.dat) fuer calcio ist hingegen vollstaendig.
+
+
+Tabelle 2 
+
+Tag  Zeit  bis  Tag  Zeit   Ort  	Auslese-Programm
+
+227  00:30      243  13:00  Teleskop 	rain_tele_227_243.f
+243  13:00      279  07:00  Teleskop    rain_tele_243_279.f
+279  07:00      280  14:30  Teleskop    rain_tele_279_280.f
+280  16:30      282  24:00  Teleskop    rain_tele_280_282.f
+283  00:30      301  12:00  Teleskop    rain_tele_283_301.f
+					
+227  00:30      260  11:30  Rebberg    	rain_reb_227_260.f
+260  12:00      280  14:30  Rebberg     rain_reb_260_280.f
+280  15:00      301  10:30  Rebberg     rain_reb_280_301.f
+
+227  00:30      301  12:00  Calcio      rain_cal_227_301.f
+
+
+1.2.2 Nettostrahlung
+
+Die Nettostrahlung NET wird in aehnlicher Weise wie der Niederschlag unterteilt und
+fuer jeden Standort Teleskop, Rebberg und Calcio in separate dat-Files geschrieben.
+Gleichzeitig wird die Nettostrahlung mit den Strahlungskoeffizienten in Tab. 3
+kalibriert:
+
+
+Tabelle 3
+
+Strahlungskoeffizienten:
+
+		SW	LW
+
+Calcio:		48.03	48.28
+
+Teleskop:	37.57	37.80
+
+Rebberg:	39.97	39.97
+
+
+Die eingelesene Nettostrahlung NET wird durch die Strahlungskoeffizienten dividiert.
+Die Division erfolgt mit dem Wert von SW, falls NET>0, und mit dem Wert von LW, falls NET<0 ist.
+
+Die Zeitreihe von Teleskop (Originaldatei: daten/teleskop/maptele.dat) zeigt keine Luecken
+auf, hingegen zeigen sich bei Rebberg (Originaldatei: daten/rebberg/maprebe.dat)
+zwischen den Tagen 270 13:30 und 271 11:00 wie auch bei Calcio (Originaldatei:
+daten/calcio/clarobf.dat) zwischen Tag 270 9:00 und 12:30, Tag 271 6:00 und 10:00
+und Tag 281 16:00 bis Tag 284 8:30 Datenluecken, welche innerhalb der Programme in Tab. 4 
+mit den Fehlwerten -999 ersetzt worden sind (Tab. 4).
+
+
+Tabelle 4
+
+Tag  Zeit  bis  Tag  Zeit   Ort  	Auslese-Programm
+
+227  00:30      243  16:00  Teleskop    net_telesk_227_243.f
+243  13:00      279  07:00  Teleskop    net_telesk_243_279.f
+279  07:00      280  14:30  Teleskop    net_telesk_279_280.f
+280  16:00      282  23:00  Teleskop    net_telesk_280_282.f
+283  00:30      301  12:00  Teleskop    net_telesk_283_301.f
+
+227  00:30      260  11:30  Rebberg    	net_reb_227_260.f
+260  12:00      280  14:30  Rebberg     net_reb_260_280.f
+280  15:00      301  10:30  Rebberg     net_reb_280_301.f
+
+224  01:00	236  10:30  Calcio	net_cal_224_236.f
+236  11:00	260  11:30  Calcio 	net_cal_236_260.f
+260  12:00	280  14:30  Calcio	net_cal_260_280.f
+270  13:30	271  12:00  Calcio	net_cal_270_271.f
+280  16:00	281  15:00  Calcio	net_cal_280_281.f
+284  09:00	301  12:00  Calcio	net_cal_284_301.f
+
+
+Die verschiedenen einzelnen dat-Files des Niederschlages und der Nettostrahlung werden
+fuer Calcio, Rebberg und Teleskop je zu einem einzigen File zusammengefuegt. Das
+bedeutet bspw., dass die sechs Files (net_cal_224_236.dat, net_cal_236_260.dat,
+net_cal_260_280.dat, net_cal_270_271.dat, net_cal_280_281.dat, net_cal_284_301.dat
+mit der kalibrierten Nettostrahlung von Calcio fuer die Tage 227 bis 301 in zeitlicher
+Abfolge in ein neues File mit dem Namen net_cal_227_331.txt geschrieben werden.
+Das Gleiche erfolgt mit dem Niederschlag und der Nettostrahlung der anderen Standorten. Es
+ergeben sich somit sechs Files in daten/ref/zeitreihe fuer den Niederschlag und die
+Nettostrahlung waehrend der Zeitperiode 227 bis 301 Tage:
+
+net_cal_227_301.txt, net_reb_227_301.txt, net_teleskop_227_301.txt,
+rain_cal_227_301.dat, rain_reb_227_301.txt und rain_teleskop227_301.txt)
+
+Ausgehend vom File daten/ref/zeitreihe/all_referenz.txt, welche die halbstuendlichen
+Druck-, Temperatur- und rel. Feuchtewerte von Tag 227 bis 301 enthalten, und den
+Nettostrahlungs- und Niederschlags-Files werden mit dem Programm referenz.f die
+halbstuendlichen Variablen in die Referenzfiles geschrieben. Dabei kalibriert das Programm
+die Temperaturen und rel. Feuchten auf die entsprechenden Niveaus.
+
+Tab. 5 gibt einen Ueberblick ueber die Herkunft der Datensaetze und die
+beruecksichtigten Niveaus fuer die Standorte A bis G:
+
+
+Tabelle 5
+
+	Niveau	t(x),rh(x)  	p,t1		Regen		Net
+---------------------------------------------------------------------------------------
+A	2	Calcio		Calcio		Calcio		Calcio
+
+B	Mitte*	Calcio		Calcio		Calcio		Calcio		
+
+C	6	Calcio		Calcio		Calcio		Calcio
+
+D	2	Calcio		Calcio		Rebberg		Rebberg
+
+E	2	CD/f**		Calcio		Teleskop	Teleskop
+
+F	2	CD/f**		Calcio		Teleskop	Teleskop
+
+G	2	CD/f**		Calcio		Teleskop	Teleskop		       
+	
+
+Mitte*: 	Mittel aus den Variablen der Niveaus 4 und 5
+CD/f**:		30-Minuten-Mittelwerte aus 21Hz-Messdaten. Sie werden jeweils aus
+                den F-Directories der CD's gelesen.
+
+
+
+2. Berechnung der rel. Feuchte und Temperatur fuer die Tage 193 bis 197 in Grono
+
+Da die Temperatur- und rel. Feuchtewerte an der Klimastation Grono nur um 7:30, 13:30 und
+19:30 Uhr gemessen werden, werden die Zeitluecken mit Hilfe der ANETZ-Station LOMA er-
+setzt. Zuerst wird die LOMA-Zeitreihe und dann die gemessenen Werte der Klimastation
+Grono aufgeplottet. Die LOMA-Zeitreihe der Temperatur und rel. Feuchte wird nun so gut
+wie moeglich an die Grono-Werte angepasst. Die Anpassung erfolgt ueber einen linearen
+Ansatz:
+
+p(Grono)=p(LOMA)*a+b
+
+Mit den beiden Programmen feuchte_int.f und temperatur.f werden die ANETZ-Zeitreihen in
+mehrere zeitliche Abschnitte unterteilt, so dass die Anpassung flexibler wird und zu
+einem besseren Resultat fuehrt. Fuer die Anpassung der Feuchte, bzw. Temperatur erfolgt
+eine Unterteilung der ANETZ-Zeitreihe in 9, bzw. 5 Abschnitte. Die angepasste Temperatur-
+Zeitreihe fuer die Tage 193 bis und mit 197 ist in daten/grono/TEMPERATUR.dat und die
+angepasste rel. Feuchte-Zeitreihe in daten/grono/FEUCHTE.dat abgespeichert.
+
+Bei unterschiedlicher Anpassung koennen kleinere oder groessere Minima und Maxima bei
+der berechneten Zeitreihe fuer Grono auftreten. Aus diesem Grund erfolgte eine Mittelung
+der angepassten Temperatur mit dem Programm runningaverage.f. Die gleitende Mittelung
+erfolgt jeweils fuer 3 Stunden. Trotzdem treten v. a. bei den Tiefstwerten noch zu grosse
+Differenzen zwischen den gemessenen Werten und der berechneten Zeitreihe auf. Diese werden
+manuell angpasst.
+
+3. Berechnung des Druckes fuer die Tage 193 bis 197 in Grono
+
+Der Druck wird an der Klimastation in Grono nicht gemessen. Deshalb werden 30-Minuten-Daten
+von San Vittore und 1-Stunden-Werte von LOMA als Ersatz genommen.
+
+3.1 Druckberechnung durch Reduzierung der Druckwerte der LOMA-Zeitreihe
+
+Die 30-Minuten-Werte von San Vittore liegen nur fuer den Tag 193 20:00 bis 197 24:00 Uhr vor.
+Die fehlenden acht Stunden des Tages 193 werden bestimmt, indem die Zeitreihe von LOMA mit
+den auf Stundenwerten gemittelten Druckwerten von San Vittore verglichen werden. Mit einer
+Ausnahme am Morgen (7:00 Uhr) von Tag 196 betraegt die mittlere Druckdifferenz zwischen LOMA
+und S. Vittore 7.3 hPa (Programm diff_grono_sv.f). Diese Differenz wird von der LOMA-Zeitreihe
+fuer die Tage 193 bis 197 24:00 subtrahiert (int_press_loma_svitt.f), sodass man eine
+berechnete Druck-Zeitreihe fuer S. Vittore erhaelt /daten/sanvittore/int_svittore.dat).
+
+3.2 Druckberechnung durch Mittelung der vorhandenen Zeitreihe in S. Vittore
+
+Eine andere Variante ist, dass die gemessene S. Vittore-Zeitreihe gemittelt wird. Dabei
+werden mit dem Programm runningaverage.f gleitende Mittelwerte mit der Mittelungslaenge 3
+berechnet (/daten/sanvittore/runave_press_svit.dat). Die fehlenden 8 Stunden vom Tag 193
+werden mit der berechneten Druck-Zeitreihe (int_svittore.dat) fuer S. Vittore ersetzt, so
+dass die endgueltige berechnete Zeitreihe fuer S. Vittore entsteht (/daten/sanvittore/
+DRUCKSVITTORE.dat).
+
+Fuer die Druckberechnung in Grono wird das Verfahren in 3.2 verwendet.
+
+4. Ediflux2000
+
+Um das Ediflux2000-Programm starten zu koennen, wird insgesamt auf den scratches von drei SUNs
+Verzeichnisse erstellt (Tab. 6):
+
+
+Tabelle 6
+
+
+ezges24
+
+
+ezges80		/scratch/patrick/andretta/data_output/
+		/scratch/patrick/andretta/data_ref/
+		/scratch/patrick/andretta/project_riviera_data/ mit edikorr.e
+
+ezges88		/scratch/andretta/data_output/
+		/scratch/andretta/data_ref/
+		/scratch/andretta/project_riviera_data/ mit a.out
+
+
+Dabei sind a.out, bzw. edikorr.e die kompilierten Exe-Files fuer die ezges88, bzw. ezges80.
+
+Mit dem Ediflux2000-Programm werden die Referenzfiles in ../data_ref/ und die Sonic-Daten auf
+den CDs eingelesen und fuer jeden Durchgang fuenf neue Datenformate ausgegeben (.csp,.spc,.frm,
+.si1,.si2). Diese werden unter ../data-output/ im jeweiligen a,b,c,d,e,f,g-Ordner abgespeichert.
+Sie sind als back-up auf dem PC ezged53d d:\user\patrick\andretta\data_output abgespeichert.
+Die neu erzeugten Daten beginnen am Tag 229 um etwa 0900 Uhr und enden am Tag 301 ca. 1200 Uhr.
+Die maximale Dauer eines Durchganges betraegt 36 Stunden. Dabei ist, wenn moeglich, die Datei,
+welche am Schluss eines Durchganges eingelesen wird, die erste Datei beim nachfolgenden Durch-
+gang.
+
+Tab. 7 zeigt fuer jeden Sonic die Zeitperioden, fuer welche die Berechnungen mit Ediflux2000
+auf ezges80 und ezges88 durchgefuehrt worden sind:
+
+
+Tabelle 7
+
+
+a
+------------------------------------------------------------------------------------------
+
+2291200 - 2302300	2451500 - 2461300	2631300 - 2650000	2801400 - 2820100	
+2302300 - 2310900	2461500 - 2480200	2650000 - 2661100	2820100 - 2831200
+2311100 - 2320800	2480200 - 2491200	2661100 - 2661300	2831200 - 2841300
+2321000 - 2332100	2491400 - 2510100	2661500 - 2680200	2841500 - 2860200
+2332100 - 2350800	2510100 - 2521200	2680200 - 2691300	2860200 - 2871300
+2350800 - 2351300	2521200 - 2532300	2691300 - 2701000	2871300 - 2890000
+2351500 - 2361400	2532300 - 2551000	2701200 - 2712300	2890000 - 2901100
+2361600 - 2380300	2551000 - 2561600	2712300 - 2720600	2901100 - 2911300
+2380300 - 2381100	2561700 - 2580400	2720900 - 2731100	2911400 - 2930100
+2381300 - 2400000	2580400 - 2591500	2731300 - 2750000	2930100 - 2941100
+2400000 - 2411100	2591500 - 2601000	2750000 - 2761100	2941500 - 2960200
+2411100 - 2421500	2601200 - 2612300	2761100 - 2771400	2960200 - 2971300
+2421700 - 2440400	2612300 - 2621000	2771600 - 2790300	2971300 - 2980800
+2440400 - 2451500	2621300 - 2631000	2790300 - 2801400	2981000 - 2992100
+									2992100 - 3010800
+									3010800 - 3011200
+------------------------------------------------------------------------------------------
+
+
+b
+------------------------------------------------------------------------------------------
+
+2291300 - 2302300	2480200 - 2491200	2661500 - 2680200	2860100 - 2871200
+2302300 - 2321000	2491400 - 2510100	2680200 - 2691300	2871200 - 2882300
+2321000 - 2332100	2510100 - 2521200	2691300 - 2700900	2882300 - 2901000
+2332100 - 2350800	2521200 - 2532300	2701200 - 2712300	2901000 - 2911100
+2350800 - 2351400	2532300 - 2551000	2712300 - 2720600	2911400 - 2930100
+2351600 - 2361400	2551000 - 2561400	2720900 - 2731000	2930100 - 2941100
+2361600 - 2380300	2561700 - 2580400	2731200 - 2742300	2941500 - 2960200
+2380300 - 2381200	2580400 - 2591500	2742300 - 2761000	2960200 - 2971300
+2381400 - 2400100	2591500 - 2601000	2761000 - 2771300	2971300 - 2980800
+2400100 - 2411200	2601200 - 2612300	2771600 - 2790300	2981000 - 2992100
+2411200 - 2421500	2612300 - 2621000	2790300 - 2801400	2992100 - 3010800
+2421800 - 2440500	2621300 - 2631000	2801400 - 2820100	3010800 - 3011000
+2440500 - 2451600	2631200 - 2642300	2820100 - 2831200
+2451600 - 2461300	2642300 - 2661000	2831200 - 2841200
+2461500 - 2480200	2661000 - 2661300	2841400 - 2860100
+------------------------------------------------------------------------------------------
+
+
+c
+------------------------------------------------------------------------------------------
+
+2291200 - 2302300	2350800 - 2351300	2381400 - 2400100	2440400 - 2451500
+2302300 - 2320800	2351500 - 2361400	2400100 - 2411200	2451500 - 2461300
+2321000 - 2332100	2361600 - 2380300	2411200 - 2421500	2461500 - 2480200
+2332100 - 2350800	2380300 - 2381200	2421700 - 2440400	2480200 - 2491200
+------------------------------------------------------------------------------------------
+
+
+d
+------------------------------------------------------------------------------------------
+
+2290900 - 2300200	2421600 - 2440300	2550000 - 2560400	2701500 - 2711100
+2301200 - 2302000	2440300 - 2440600	2561200 - 2572300	2711300 - 2721400
+2311100 - 2312300	2440900 - 2452000	2572300 - 2590000	2721600 - 2731600
+2322100 - 2331900	2452000 - 2460800	2601300 - 2612300	2740900 - 2751400
+2340800 - 2351800	2461000 - 2472100	2631500 - 2640600	2771000 - 2782100
+2360900 - 2361800	2491100 - 2502100	2640800 - 2650800	2782100 - 2800800
+2362000 - 2380700	2502100 - 2520800	2650800 - 2660900	2800800 - 2811300
+2380700 - 2380900	2520800 - 2530100	2661100 - 2672200	2811500 - 2830200
+2381100 - 2381700	2531300 - 2550000	2672200 - 2681800	2830200 - 2841100
+									2841200 - 2852300
+									2852300 - 2860200
+------------------------------------------------------------------------------------------
+
+
+e
+------------------------------------------------------------------------------------------
+
+2591700 - 2600800	2701000 - 2712100	2812100 - 2830800	2922300 - 2941000
+2601100 - 2612200	2712100 - 2730800	2830800 - 2841400	2941000 - 2952100
+2612200 - 2630900	2731100 - 2742200	2841600 - 2860300	2952100 - 2970800
+2631100 - 2642200	2742200 - 2760900	2860300 - 2871400	2970800 - 2971200
+2642200 - 2652000	2760900 - 2770900	2871400 - 2890100	2981400 - 3000100
+2661600 - 2680300	2771200 - 2782300	2890100 - 2901200	3000100 - 3011100
+2680300 - 2691400	2782300 - 2801000	2901200 - 2910900
+2691400 - 2700800	2801000 - 2812100	2911200 - 2922300
+-------------------------------------------------------------------------------------------
+
+
+f
+-------------------------------------------------------------------------------------------
+
+2561400 - 2580100	2672300 - 2691000	2800900 - 2812000	2922200 - 2940900
+2580100 - 2591200	2691000 - 2700800	2812000 - 2830700	2940900 - 2952000
+2591200 - 2600800	2701000 - 2712100	2830700 - 2841400	2952000 - 2970700
+2601000 - 2612100	2712100 - 2730800	2841600 - 2860300	2970700 - 2981100
+2612100 - 2630800	2731000 - 2742100	2860300 - 2871400	2981400 - 3000100
+2631000 - 2642100	2742100 - 2760800	2871400 - 2890100	3000100 - 3011100
+2642100 - 2660800	2760800 - 2770900	2890100 - 2901200
+2660800 - 2661000	2771100 - 2782200	2901200 - 2910900
+2661200 - 2672300	2782200 - 2800900	2911100 - 2922200
+-------------------------------------------------------------------------------------------
+
+
+g
+-------------------------------------------------------------------------------------------
+
+2561400 - 2580100	2661200 - 2672300	2782200 - 2800900	2911200 - 2922300
+2580100 - 2591200	2672300 - 2691000	2800900 - 2812000	2922300 - 2941000
+2591200 - 2591400	2691000 - 2700800	2812000 - 2830700	2941000 - 2952100
+2591700 - 2600900	2701000 - 2712100	2830700 - 2841400	2952100 - 2961600
+2601100 - 2612200	2712100 - 2730800	2841500 - 2860200	2981400 - 3000100
+2612200 - 2630800	2731000 - 2742100	2860200 - 2871300	3000100 - 3011100
+2631000 - 2642100	2742100 - 2760800	2871300 - 2890000
+2642100 - 2660800	2760800 - 2770900	2890000 - 2901100
+2660800 - 2661000	2771100 - 2782200	2901100 - 2910900
+-------------------------------------------------------------------------------------------
+
+
+4.1 Zeitluecken und Fehler
+
+Die 5 Dateien g28415n36a30f300.* weisen fast allesamt NaN-Werte auf. Alle anderen Dateien ausserhalb
+dieser Zeitperiode sind korrekt und enthalten keine NaN-Werte.
+
+
+Tab. 8 enthaelt diejenigen Ordner mit den Zeitperioden, in welchen mit Hilfe des Ediflux2000-Programms
+keine Berechnungen vorgenommen werden koennen und der Zeitunterschied zwischen der letzten Datei des
+vorhergehenden Durchlaufs und der ersten Datei des nachfolgenden Durchlaufes groesser als 4 Stunden
+ist. 
+
+
+Tabelle 8
+
+
+
+a	2941100 - 2941500
+
+b	2941100 - 2941500
+
+c	-
+
+d	weist sehr viele Zeitluecken auf
+
+e	2652000 - 2661600	2971200 - 2981400
+
+f	komplett
+
+g	2961600 - 2981400
+
+
+

@@ -16,8 +16,10 @@ import os
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
 
+# TODO 
 # TODO check with Iva about what to do
 # DoY 212 - DoY 214 8:30 OR DoY 216 22:30saved as summer CET, not CET
+# TODO check the daily cycles to determine time?
 
 
 # set minimum number of values which must be present in the file to process it
@@ -30,16 +32,15 @@ save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed
 # path to data from the MCR sonics at "mn" location
 path = "/home/alve/Desktop/Riviera/MAP_subset/data/ro/rohdaten/fast"
 
-# list N1/N3 .raw and files in all subfolders (day of year)
-# N1/N3 refers to levels where CSAT3 sonics were used
-files_N1 = sorted(glob.glob(os.path.join(path, '**/RO_N1_*.raw')))
+# list  .raw and files in all subfolders (day of year)
+# N1 refers to the level where the Metek sonic was used
+files_ro_N1 = sorted(glob.glob(os.path.join(path, '**/RO_N1_*.raw')))
 
-# frequency of CSAT3 sonics
+# frequency of Metek sonic
 freq = 10
 
-# concatenate the two lists
 # TODO process all files, not only a subset
-f_raw_all = files_N1[:10]
+f_raw_all = files_ro_N1[:10]
 
 # %% Function definitions
 
