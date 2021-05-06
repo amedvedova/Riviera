@@ -446,6 +446,9 @@ def get_temp_simplified(sos):
     take into account pressure and humidity changes. Taken from read_slt.m
     script from Iva
 
+    The 0.02 comes from the way how the sonic stores the speed of sound data,
+    i.e. this calculation is based on the eqn. T = c^2 / 403
+
     Parameters
     ----------
     sos : array

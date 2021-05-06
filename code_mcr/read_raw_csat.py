@@ -28,6 +28,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import glob
 import os
+import datetime as dt
 
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
@@ -37,7 +38,7 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
 count_threshold = 35000
 
 # flag to save files, folder to which files will be saved
-savefiles = False
+savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
 # path to data from the MCR sonics at "mn" location
@@ -52,8 +53,7 @@ files_mn_N3 = sorted(glob.glob(os.path.join(path, '**/MN_N3_*.raw')))
 freq = 20
 
 # concatenate the two lists
-# TODO process all files, not only a subset
-f_raw_all = files_mn_N1[:10] + files_mn_N3[:10]
+# f_raw_all = files_mn_N1[:10] + files_mn_N3[:10]
 f_raw_all = files_mn_N1 + files_mn_N3
 
 
@@ -135,12 +135,12 @@ def uvwt_from_file(file, count):
     uvwt[:, 0] = uvwt[:, 0] * 0.001 * ux
     uvwt[:, 1] = uvwt[:, 1] * 0.001 * uy
     uvwt[:, 2] = uvwt[:, 2] * 0.001 * uz
-    uvwt[:, 3] = (uvwt[:, 3] * 0.001 + 340.0)**2 / 402.7
+    uvwt[:, 3] = (uvwt[:, 3] * 0.001 + 340.0)**2 / 403
 
     return uvwt
 
 
-def ds_from_uvwt(uvwt_full, date):
+def ds_from_uvwt(uvwt_full, date, date_rounded):
     """
     Covnvert the np data array to a dataset containing metadata
 
@@ -160,8 +160,22 @@ def ds_from_uvwt(uvwt_full, date):
     #   if there are fewer points, nothing happens
     uvwt = uvwt_full[:36000, :]
 
+    # if files don't start at full 30 min, pad in the beginning
+    # first, based on time, get number of missing measurements (20 per second)
+    #   minus one since only seconds are stored (no miliseconds) and so there
+    #   can be a few extra measurements
+    if date == date_rounded:
+        missing_front = 0
+    else:
+        missing_front = ((date - date_rounded).seconds - 1) * freq
+
+    # second, add rows of NaNs in the beginning of the file
+    uvwt = np.pad(uvwt, ((missing_front, 0), (0, 0)),
+                  'constant', constant_values=np.nan)
+
     # on the other hand, pad to 36000 for shorter files
-    uvwt = np.pad(uvwt, ((0, 36000-uvwt.shape[0]), (0, 0)),
+    missing_end = 36000 - uvwt.shape[0]
+    uvwt = np.pad(uvwt, ((0, missing_end), (0, 0)),
                   'constant', constant_values=np.nan)
 
     # make a dictinary of variables
@@ -170,7 +184,7 @@ def ds_from_uvwt(uvwt_full, date):
                      w=('time', uvwt[:, 2]),
                      T=('time', uvwt[:, 3]))
     # make a range of time values: use fixed time periods
-    timerange_full = pd.date_range(date,
+    timerange_full = pd.date_range(date_rounded,
                                    freq=str(1/freq)+'S',
                                    periods=36000)
     # define coordinates
@@ -185,64 +199,80 @@ def ds_from_uvwt(uvwt_full, date):
     ds.w.attrs = {'units': 'm/s'}
     ds.T.attrs = {'units': 'K'}
 
+    # Add info how much files were padded in the beginning/end
+    ds.attrs['padded_front'] = missing_front
+    ds.attrs['padded_end'] = missing_end
+
     return ds
 
 
-def floor_30min(time):
-    # TODO
-    """
-    calculate dt
-    subtract
-    get index of orignal time
-    return index - use this later for padding
-    """
-    time_rounded = None
-    return time_rounded
-
-
 def info_from_filename(file):
+    """
+    Based on the filename, this function determines the location of the sonic
+    (i.e. the tower and the level of the sonic on the given tower), together
+    with generating the timestamp for the output file.
+
+    One more timestamp s generated: the input time rounded down to the nearest
+    half-hour. E.g. for files with timestamp at 16:22 the rounded time will be
+    16:00. If the two timestamps are not equal, file is padded with NaNs in the
+    beginning of the measurement period.
+
+    Parameters
+    ----------
+    file : str
+        Filename containg the info about location of the sonic and timestamp
+
+    Returns
+    -------
+    loc : str
+        DESCRIPTION.
+    date : pandas timestamp
+        original timestamp parsed from the filename
+    date_rounded : pandas timestamp
+        timestamp rounded down to the nearest 30 min
+
+    """
     # filename
     filename = os.path.split(file)[1]
     # string containing the time information
     datestring = filename[6:-4]
     # proper timestamp denoting when the file begins
     date = pd.to_datetime(datestring, format='%Y_%j_%H%M%S')
-    # TODO round down to 30 min
-    # https://stackoverflow.com/questions/32723150/rounding-up-to-nearest-30-minutes-in-python
+
+    # get the previous whole half-hour time
+    # (some files start e.g. at 16:04 - in that case, make a 16:00 timestamp)
+    # Define the rounding period to 30 minutes
+    delta = dt.timedelta(minutes=30)
+    # Convert the pandas timestamp to python datetime
+    pydate = date.to_pydatetime()
+    # Round down to nearest 30 min; convert back to pandas timestamp
+    date_rounded = pd.to_datetime(pydate - (pydate - dt.datetime.min) % delta)
 
     # get level of the sonic: either 1 (N1) or 2 (N3)
-    if filename[3:5] == 'N1':
+    if filename[0:5] == 'MN_N1':
         loc = 'E2_1'
-    elif filename[3:5] == 'N3':
+    elif filename[0:5] == 'MN_N3':
         loc = 'E2_2'
 
-    return loc, date
+    return loc, date, date_rounded
 
 
 # %%
-counter = 0
+# counter = 0
 for f_raw in f_raw_all:
     with open(f_raw, 'rb') as file:
         # get location and time of file
-        loc, date = info_from_filename(f_raw)
+        loc, date, date_30min_floor = info_from_filename(f_raw)
         # get filesize in bytes
         size = os.path.getsize(f_raw)
         # get count of measurements: (size/10)-1 since each measurement is
         # 10 bytes and the first measurement is corrupt
         count = int((size / 10) - 1)
-        if count < 32400: 
-            print('{} - {} - datapoints: {}'.format(date, f_raw[-14:-11], count))
-            counter += 1
-            continue
-        else:
-            continue
-        # TODO ask Iva: if a lot of data is missing, skip file
-        if count <= count_threshold:
-            continue
+
         # load data from the buffer, process it and make and uvwt array
         uvwt = uvwt_from_file(file, count)
         # make a data set from the array, add metadata of variables
-        ds = ds_from_uvwt(uvwt, date)
+        ds = ds_from_uvwt(uvwt, date, date_30min_floor)
 
         # add general metadata
         ds.attrs['frequency [Hz]'] = freq
@@ -256,13 +286,6 @@ for f_raw in f_raw_all:
         # save data
         if savefiles:
             # produce output name based on time and location
-            output_name = '{}_{}.nc'.format(loc, date.strftime('%Y_%m_%d_%H%M'))
+            output_name = '{}_{}.nc'.format(loc, date_30min_floor.strftime('%Y_%m_%d_%H%M'))
             # save file
             ds.to_netcdf(os.path.join(save_folder, output_name))
-
-print('Counter: {}'.format(counter))
-# fig, axes = plt.subplots(nrows=2, ncols=2, figsize=[12,12])
-# axes = axes.flatten()
-# for i in range(4):
-#     axes[i].plot(uvwt[:, i])
-# fig.show()
