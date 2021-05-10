@@ -37,8 +37,11 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
 
 
-# set minimum number of values which must be present in the file to process it
-count_threshold = 36000     # out of 37496
+verbose = True
+
+# constants and utils etc
+quarzfreq = 29491200*0.5
+pathlength = np.array([0.149, 0.149, 0.149]) * quarzfreq
 
 # flag to save files, folder to which files will be saved
 savefiles = False
@@ -57,48 +60,118 @@ files_mn_N5 = sorted(glob.glob(os.path.join(path_mn, '**/MN_N5_*.raw')))
 files_mn_N7 = sorted(glob.glob(os.path.join(path_mn, '**/MN_N7_*.raw')))
 files_ro_N2 = sorted(glob.glob(os.path.join(path_ro, '**/RO_N2_*.raw')))
 
-# frequency of CSAT3 sonics
-freq = 20
+# frequency of Gill R2 sonics
+freq = 37500/1800
 
 # concatenate the two lists
 # TODO process all files, not only a subset
-f_raw_all = files_ag_N2[:10] + files_ag_N4[:10] + files_mn_N4[:10] + \
-            files_mn_N5[:10] + files_mn_N7[:10] + files_ro_N2[:10]
+# f_raw_all = files_ag_N2[:10] + files_ag_N4[:10] + files_mn_N4[:10] + \
+#             files_mn_N5[:10] + files_mn_N7[:10] + files_ro_N2[:10]
+f_raw_all = files_ag_N2 + files_ag_N4 + files_mn_N4 + \
+            files_mn_N5 + files_mn_N7 + files_ro_N2
 
-f_raw_all = f_raw_all[2:3]
+# f_raw_all = f_raw_all[2:3]
+f_raw_all = f_raw_all
 
 
 # %% Function definitions
 
 
-def uvwt_from_file(file, count, bytes_per_row):
+def tc_from_file(raw_bytes, count, bytes_per_row):
     """
-    Function for reading the opened file (buffer) and converting the data to
-    a numpy array with u, v, w, T variables. All calculations and processing
-    are done within this function.
+    TODO
 
     Parameters
     ----------
-    file : _io.BufferedReader
-        opened file of the raw binary data
-
+    raw_bytes : TYPE
+        DESCRIPTION.
+    count : TYPE
+        DESCRIPTION.
+    bytes_per_row : TYPE
+        DESCRIPTION.
 
     Returns
     -------
-    uvwt : np.array
-        numpy array holding the processed values of u, v, w, T
+    tc : TYPE
+        DESCRIPTION.
 
     """
-    # read raw bytes from the file
-    raw_bytes = file.read()
-    dtype = '{}u2'.format(int(bytes_per_row/2))
-    # Load data
-    transit_count = np.frombuffer(raw_bytes, dtype=dtype)
-    # tc: transit counts
 
+    # TODO big- or little-endian?
+    tc = np.frombuffer(raw_bytes, dtype='u2')
+
+    first_index = np.where(tc == 33153)[0][0]
+    last_index = np.where(tc == 33410)[0][-1]
+    tc = tc[first_index:last_index+1].reshape((-1, int(bytes_per_row/2)))
+
+    # Check if data is correctly recorded
+    check_1 = (tc[:, 0] == 33153).all()   # hex(33153) = 8181
+    check_2 = (tc[:, -1] == 33410).all()  # hex(33410) = 8282
+    if not (check_1 and check_2):
+        if verbose:
+            print('Checks not passed')
+        # TODO implement something here to return NaNs or whatever
+        return
+
+    # After checks, strip off first two + last column (checks, counter, checks)
+    # We'll be left with 6 columns (or 7 if there's a sonic)
+    tc = tc[:, 2:-1]
+
+    return tc
+
+
+def tc_from_corrupt_file(raw_bytes, count, bytes_per_row):
+    """
+    Use this function if there's a value error when trying to parse the stream
+    of bytes.
+    TODO write docs
+
+    Parameters
+    ----------
+    raw_bytes : TYPE
+        DESCRIPTION.
+    count : TYPE
+        DESCRIPTION.
+    bytes_per_row : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    tc : TYPE
+        DESCRIPTION.
+
+    """
+    
+
+    # There's probably a more elegant way to do this...
+    # Split the file into groups of bytes: each group begins with
+    # hex(33153) = 8181, ends with hex(33410) = 8282 and has 18/20 bytes
+
+    # Split records: each has to begin with 8181
+    raw_lines = raw_bytes.split((b'\x81\x81'))
+    # select lines that end with 8282 and have the correct number of bytes
+    select_lines = [l for l in raw_lines if (l[-2:] == b'\x82\x82') &
+                    (len(l) == (bytes_per_row - 2))]
+
+    # join these good bytestrings into a stream of bytes again
+    cleaned_bytes = b''.join(select_lines)
+
+    # make an array of transit counts from the cleaned data
+    # -2 bcs the 8181 bytes are removed now, and /2 bcs two bytes per stream
+    channels = int((bytes_per_row - 2) / 2)
+    # turn into an array with channels as columns
+    # TODO little- or big-endian again?
+    tc = np.frombuffer(cleaned_bytes, dtype='>{}u2'.format(channels))
+
+    # Remove first column (counter), we'll be left with 6/7 columns
+    tc = tc[:, 1:]
+
+    return tc
+
+
+def uvwt_from_tc(tc):
     # TODO get uvwt from transit count
-    uvwt = 0 * transit_count
-    return uvwt
+    return
 
 
 def ds_from_uvwt(uvwt_full, date):
@@ -178,8 +251,10 @@ def info_from_filename(file):
 
 
 # %%
+counter = 0
 
-for f_raw in f_raw_all:
+# f_raw = f_raw_all[2683]
+for f_raw in f_raw_all[2600:3000]:
     with open(f_raw, 'rb') as file:
         # get location and time of file
         loc, date = info_from_filename(f_raw)
@@ -193,19 +268,40 @@ for f_raw in f_raw_all:
 
         # get filesize in bytes
         size = os.path.getsize(f_raw)
+        # for extremely small files (arbitrarily chosen to circa 15%): skip
+        if size < 5000:
+            continue
+
         # get count of measurements: (size/10)-1 since each measurement is
         # 10 bytes and the first measurement is corrupt
         count = int(size / bytes_per_row)
-        # TODO ask Iva: if a lot of data is missing, skip file
-        if count <= count_threshold:
-            continue
+
         # load data from the buffer, process it and make and uvwt array
-        uvwt = uvwt_from_file(file, count, bytes_per_row)
+        # read raw bytes from the file
+        raw_bytes = file.read()
+
+        # Get the raw transit count array
+        try:
+            tc = tc_from_file(raw_bytes, count, bytes_per_row)
+        except ValueError:
+            tc = tc_from_corrupt_file(raw_bytes, count, bytes_per_row)
+
+        if verbose:
+            print(count, tc.shape)
+        # if there are more than 5% or broken data entries, skip the file
+        if tc.shape[0] / count < 0.95:
+            print('Broken file: {}'.format(os.path.split(f_raw)[1]))
+            continue
+
+        continue
+
+        # From the transit counts, get uvwt array
+        uvwt = uvwt_from_tc(tc)
         # make a data set from the array, add metadata of variables
         ds = ds_from_uvwt(uvwt, date)
 
         # add general metadata
-        ds.attrs['frequency [Hz]'] = freq
+        ds.attrs['frequency [Hz]'] = 20.83
         ds.attrs['sonic tower and level'] = sonic_location[loc]
         ds.attrs['sonic serial number'] = sonic_SN[loc]
         ds.attrs['sonic height [m]'] = sonic_height[loc]
@@ -219,7 +315,7 @@ for f_raw in f_raw_all:
             # save file
             ds.to_netcdf(os.path.join(save_folder, output_name))
 
-
+print(counter)
 # fig, axes = plt.subplots(nrows=2, ncols=2, figsize=[12,12])
 # axes = axes.flatten()
 # for i in range(4):

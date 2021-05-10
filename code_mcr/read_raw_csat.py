@@ -162,12 +162,13 @@ def ds_from_uvwt(uvwt_full, date, date_rounded):
 
     # if files don't start at full 30 min, pad in the beginning
     # first, based on time, get number of missing measurements (20 per second)
-    #   minus one since only seconds are stored (no miliseconds) and so there
-    #   can be a few extra measurements
     if date == date_rounded:
         missing_front = 0
     else:
-        missing_front = ((date - date_rounded).seconds - 1) * freq
+        missing_front = ((date - date_rounded).seconds) * freq
+        # if we'd have more than 18000 points with this padding, pad less
+        if missing_front + uvwt.shape[0] > 36000:
+            missing_front -= (missing_front + uvwt.shape[0] - 36000)
 
     # second, add rows of NaNs in the beginning of the file
     uvwt = np.pad(uvwt, ((missing_front, 0), (0, 0)),
@@ -225,7 +226,7 @@ def info_from_filename(file):
     Returns
     -------
     loc : str
-        DESCRIPTION.
+        location of the sonic: tower+level
     date : pandas timestamp
         original timestamp parsed from the filename
     date_rounded : pandas timestamp
@@ -258,7 +259,7 @@ def info_from_filename(file):
 
 
 # %%
-# counter = 0
+
 for f_raw in f_raw_all:
     with open(f_raw, 'rb') as file:
         # get location and time of file
