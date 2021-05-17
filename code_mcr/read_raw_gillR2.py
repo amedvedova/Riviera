@@ -16,13 +16,13 @@
 # are present, otherwise these bytes are missing
 # 1122334455667788aa99
 # 1 = start of record HEX "8181" = -32383
-# 2 = record number (Counter)
-# 3 = transit count t-b axis 1 msb/lsb
-# 4 = transit count b-t axis 1 msb/lsb
-# 5 = transit count t-b axis 2 msb/lsb
-# 6 = transit Count b-t axis 2 msb/lsb
-# 7 = transit Count t-b axis 3 msb/lsb
-# 8 = transit Count b-t axis 3 msb/lsb
+# 2 = record number (Counter): values 0-10000
+# 3 = transit count t-b axis 1 msb/lsb: values -10000 - 15000
+# 4 = transit count b-t axis 1 msb/lsb: values -10000 - 15000
+# 5 = transit count t-b axis 2 msb/lsb: values -10000 - 15000
+# 6 = transit Count b-t axis 2 msb/lsb: values -10000 - 15000
+# 7 = transit Count t-b axis 3 msb/lsb: values -10000 - 15000
+# 8 = transit Count b-t axis 3 msb/lsb: values -10000 - 15000
 # [a] = analog inputs msb/lsb
 # 9 = end of record HEX "8282" = -32126
 
@@ -40,8 +40,8 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
 verbose = True
 
 # constants and utils etc
-quarzfreq = 29491200*0.5
-pathlength = np.array([0.149, 0.149, 0.149]) * quarzfreq
+FREQ = 29.4912e6        # [Hz] Freq of ultrasonic pulse
+PATHLENGTH = 0.149      # [m] Distance between sonic heads
 
 # flag to save files, folder to which files will be saved
 savefiles = False
@@ -97,16 +97,17 @@ def tc_from_file(raw_bytes, count, bytes_per_row):
 
     """
 
-    # TODO big- or little-endian?
-    tc = np.frombuffer(raw_bytes, dtype='u2')
+    # convert bytes to signed integers
+    tc = np.frombuffer(raw_bytes, dtype='>i2')
 
-    first_index = np.where(tc == 33153)[0][0]
-    last_index = np.where(tc == 33410)[0][-1]
-    tc = tc[first_index:last_index+1].reshape((-1, int(bytes_per_row/2)))
+    # first_index = np.where(tc == -32383)[0][0]
+    # last_index = np.where(tc == -32126)[0][-1]
+    # tc = tc[first_index:last_index+1].reshape((-1, int(bytes_per_row/2)))
+    tc = tc.reshape((-1, int(bytes_per_row/2)))
 
     # Check if data is correctly recorded
-    check_1 = (tc[:, 0] == 33153).all()   # hex(33153) = 8181
-    check_2 = (tc[:, -1] == 33410).all()  # hex(33410) = 8282
+    check_1 = (tc[:, 0] == -32383).all()   # hex(33153) = 8181
+    check_2 = (tc[:, -1] == -32126).all()  # hex(33410) = 8282
     if not (check_1 and check_2):
         if verbose:
             print('Checks not passed')
@@ -141,13 +142,12 @@ def tc_from_corrupt_file(raw_bytes, count, bytes_per_row):
         DESCRIPTION.
 
     """
-    
 
     # There's probably a more elegant way to do this...
     # Split the file into groups of bytes: each group begins with
     # hex(33153) = 8181, ends with hex(33410) = 8282 and has 18/20 bytes
 
-    # Split records: each has to begin with 8181
+    # Split data records: each has to begin with 8181
     raw_lines = raw_bytes.split((b'\x81\x81'))
     # select lines that end with 8282 and have the correct number of bytes
     select_lines = [l for l in raw_lines if (l[-2:] == b'\x82\x82') &
@@ -161,17 +161,54 @@ def tc_from_corrupt_file(raw_bytes, count, bytes_per_row):
     channels = int((bytes_per_row - 2) / 2)
     # turn into an array with channels as columns
     # TODO little- or big-endian again?
-    tc = np.frombuffer(cleaned_bytes, dtype='>{}u2'.format(channels))
+    tc = np.frombuffer(cleaned_bytes, dtype='>{}i2'.format(channels))
 
-    # Remove first column (counter), we'll be left with 6/7 columns
-    tc = tc[:, 1:]
+    # Remove first column (counter) and last column (check bytes)
+    # we'll be left with 6/7 columns
+    tc = tc[:, 1:-1]
 
     return tc
 
 
-def uvwt_from_tc(tc):
-    # TODO get uvwt from transit count
-    return
+def uncalibrated_uvwt_from_tc(tc):
+    # 6 channels: ax1 tc1, ax1 tc2, ax2 tc1, ax2 tc2, ax3 tc1, ax3 tc2
+    # get axis velocity av: av = 0.5*pathlength*freq*(1/tc1 - 1/tc2)  [m/s]
+    av1 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 0] - 1/tc[:, 1])
+    av2 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 2] - 1/tc[:, 3])
+    av3 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 4] - 1/tc[:, 5])
+
+    # get wind components from axis velocities (based on geometry)
+    u = (2*av1 - av2 - av3) / 2.1213
+    v = (av2 - av3) / 1.2247
+    w = (-av1 - av2 - av3) / 2.1213
+
+    # The Basel lab in their analysis applied a correction based on a paper:
+    # DOI 10.1007/s10546-015-0010-3
+    # The correction ends up being less than 0.01%, why even bother...
+    # get speed of sound: separately for each axis, then average
+    c1 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 0] + 1/tc[:, 1])
+    c2 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 2] + 1/tc[:, 3])
+    c3 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 4] + 1/tc[:, 5])
+    # get windspeed
+    wspd = np.sqrt(u**2 + v**2 + w**2)
+    # get components of wspd orthogonal to each path: naming after Basel code
+    vu = np.sqrt(wspd**2 - av1**2)
+    vv = np.sqrt(wspd**2 - av2**2)
+    vw = np.sqrt(wspd**2 - av3**2)
+    # get temperature along each axis from speed of sound and correction
+    t1 = (c1**2 + vu**2) / 402.7
+    t2 = (c2**2 + vv**2) / 402.7
+    t3 = (c3**2 + vw**2) / 402.7
+    # average temperature
+    t = (t1 + t2 + t3)/3
+
+    # for reference: non-corrected temperature calculation
+    # t_notc = (c1**2 + c2**2 + c3**2)/402.7 / 3
+
+    # make one array from the calculated values
+    uvwt = np.array([u, v, w, t]).T
+
+    return uvwt
 
 
 def ds_from_uvwt(uvwt_full, date):
@@ -254,7 +291,7 @@ def info_from_filename(file):
 counter = 0
 
 # f_raw = f_raw_all[2683]
-for f_raw in f_raw_all[2600:3000]:
+for f_raw in f_raw_all[2600:2800]:
     with open(f_raw, 'rb') as file:
         # get location and time of file
         loc, date = info_from_filename(f_raw)
@@ -284,19 +321,23 @@ for f_raw in f_raw_all[2600:3000]:
         try:
             tc = tc_from_file(raw_bytes, count, bytes_per_row)
         except ValueError:
+            counter += 1
             tc = tc_from_corrupt_file(raw_bytes, count, bytes_per_row)
 
-        if verbose:
-            print(count, tc.shape)
+        # if verbose:
+        #     print(count, tc.shape)
         # if there are more than 5% or broken data entries, skip the file
         if tc.shape[0] / count < 0.95:
             print('Broken file: {}'.format(os.path.split(f_raw)[1]))
             continue
 
-        continue
+        if ((tc[:, 0:6] <= -10000) | (tc[:, 0:6] > 15000)).any():
+            print('Broken file, values out of range')
 
         # From the transit counts, get uvwt array
-        uvwt = uvwt_from_tc(tc)
+        uvwt = uncalibrated_uvwt_from_tc(tc)
+
+        continue
         # make a data set from the array, add metadata of variables
         ds = ds_from_uvwt(uvwt, date)
 
