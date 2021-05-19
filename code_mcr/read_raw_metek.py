@@ -115,7 +115,6 @@ def ds_from_uvwt(uvwt_full, date, date_rounded):
         if missing_front + uvwt.shape[0] > 18000:
             missing_front -= (missing_front + uvwt.shape[0] - 18000)
 
-
     # second, add rows of NaNs in the beginning of the file
     uvwt = np.pad(uvwt, ((missing_front, 0), (0, 0)),
                   'constant', constant_values=np.nan)

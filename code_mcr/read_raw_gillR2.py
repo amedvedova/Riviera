@@ -32,9 +32,11 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import glob
 import os
+import datetime as dt
 
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
+from gill_calibrate import get_all_corrections as correct
 
 
 verbose = True
@@ -65,54 +67,54 @@ freq = 37500/1800
 
 # concatenate the two lists
 # TODO process all files, not only a subset
-# f_raw_all = files_ag_N2[:10] + files_ag_N4[:10] + files_mn_N4[:10] + \
-#             files_mn_N5[:10] + files_mn_N7[:10] + files_ro_N2[:10]
-f_raw_all = files_ag_N2 + files_ag_N4 + files_mn_N4 + \
-            files_mn_N5 + files_mn_N7 + files_ro_N2
-
-# f_raw_all = f_raw_all[2:3]
-f_raw_all = f_raw_all
+n = 100
+f_raw_all = files_ag_N2[:n] + files_ag_N4[:n] + files_mn_N4[:n] + \
+            files_mn_N5[:n] + files_mn_N7[:n] + files_ro_N2[:n]
+# f_raw_all = files_ag_N2 + files_ag_N4 + files_mn_N4 + \
+#             files_mn_N5 + files_mn_N7 + files_ro_N2
 
 
 # %% Function definitions
 
 
-def tc_from_file(raw_bytes, count, bytes_per_row):
+def tc_from_file(raw_bytes, bytes_per_row):
     """
-    TODO
+    Function to read in the raw bytes and try to parse them into an array,
+    based on the number of channels (bytes_per_row) - 6 channels usually, 7 if
+    a krypton is present as well.
+
+    If this function fails (e.g. missing bytes), a ValueError is raised and
+    another function is called, which deals with broken files.
 
     Parameters
     ----------
-    raw_bytes : TYPE
-        DESCRIPTION.
-    count : TYPE
-        DESCRIPTION.
-    bytes_per_row : TYPE
-        DESCRIPTION.
+    raw_bytes : bytes
+        bytes read from the file; to be parsed into a meaningful array
+    bytes_per_row : int
+        how many bytes there are in each row: depends on the number of analog
+        inputs.
 
     Returns
     -------
-    tc : TYPE
-        DESCRIPTION.
+    tc : np.array
+        array containing 6 transit count columns (2 per sonic axis) and
+        possibly humidity data (which is useless since we don't know the units
+        and encoding).
 
     """
 
-    # convert bytes to signed integers
+    # convert bytes to signed two-byte integers (int16)
     tc = np.frombuffer(raw_bytes, dtype='>i2')
-
-    # first_index = np.where(tc == -32383)[0][0]
-    # last_index = np.where(tc == -32126)[0][-1]
-    # tc = tc[first_index:last_index+1].reshape((-1, int(bytes_per_row/2)))
+    # reshape the array based on the number of columns
     tc = tc.reshape((-1, int(bytes_per_row/2)))
 
     # Check if data is correctly recorded
     check_1 = (tc[:, 0] == -32383).all()   # hex(33153) = 8181
     check_2 = (tc[:, -1] == -32126).all()  # hex(33410) = 8282
     if not (check_1 and check_2):
-        if verbose:
-            print('Checks not passed')
-        # TODO implement something here to return NaNs or whatever
-        return
+        # If data is not recorded correctly, the second data reading method
+        # will be used
+        raise ValueError
 
     # After checks, strip off first two + last column (checks, counter, checks)
     # We'll be left with 6 columns (or 7 if there's a sonic)
@@ -121,25 +123,28 @@ def tc_from_file(raw_bytes, count, bytes_per_row):
     return tc
 
 
-def tc_from_corrupt_file(raw_bytes, count, bytes_per_row):
+def tc_from_corrupt_file(raw_bytes, bytes_per_row):
     """
+    Another function to read in the raw bytes and try to parse them into an
+    array, based on the number of channels (bytes_per_row) - 6 channels
+    usually, 7 if a krypton is present as well.
+
     Use this function if there's a value error when trying to parse the stream
-    of bytes.
-    TODO write docs
+    of bytes: it works by identifying complete rows which start and end with
+    the correct control bytes.
 
     Parameters
     ----------
-    raw_bytes : TYPE
-        DESCRIPTION.
-    count : TYPE
-        DESCRIPTION.
-    bytes_per_row : TYPE
-        DESCRIPTION.
+    raw_bytes : bytes
+        bytes read from the file; to be parsed into a meaningful array
+    bytes_per_row : int
+        how many bytes there are in each row: depends on the number of analog
+        inputs.
 
     Returns
     -------
-    tc : TYPE
-        DESCRIPTION.
+    tc : np.array
+        array containing 6 transit count columns (2 per sonic axis)
 
     """
 
@@ -150,8 +155,8 @@ def tc_from_corrupt_file(raw_bytes, count, bytes_per_row):
     # Split data records: each has to begin with 8181
     raw_lines = raw_bytes.split((b'\x81\x81'))
     # select lines that end with 8282 and have the correct number of bytes
-    select_lines = [l for l in raw_lines if (l[-2:] == b'\x82\x82') &
-                    (len(l) == (bytes_per_row - 2))]
+    select_lines = [line for line in raw_lines if (line[-2:] == b'\x82\x82') &
+                    (len(line) == (bytes_per_row - 2))]
 
     # join these good bytestrings into a stream of bytes again
     cleaned_bytes = b''.join(select_lines)
@@ -160,7 +165,6 @@ def tc_from_corrupt_file(raw_bytes, count, bytes_per_row):
     # -2 bcs the 8181 bytes are removed now, and /2 bcs two bytes per stream
     channels = int((bytes_per_row - 2) / 2)
     # turn into an array with channels as columns
-    # TODO little- or big-endian again?
     tc = np.frombuffer(cleaned_bytes, dtype='>{}i2'.format(channels))
 
     # Remove first column (counter) and last column (check bytes)
@@ -170,7 +174,60 @@ def tc_from_corrupt_file(raw_bytes, count, bytes_per_row):
     return tc
 
 
-def uncalibrated_uvwt_from_tc(tc):
+def uvwt_from_tc(tc, loc):
+    """
+    Function to calculate the wind speed components and temperature from the
+    transit counts.
+
+    First, calculate the "axis velocities" (av) for each axis. From those,
+    based on the geometry of the sonic, calculate the raw wind components; the
+    values in this calculation are based on the reference manual of the sonic
+    (only the Gill R3 reference manual is available as of 2021), as well as on
+    the original analysis script provided by Rolang Vogt. The values in the
+    manual and the script are identical. These are UNCALBRATED wind components.
+
+    Temperature calculation and correction:
+    From the transit counts, uncorrected speed of sound (c) is
+    calculated for each axis. Correction due to crosswind is then applied, for
+    reference check e.g. see e.g. DOI 10.1007/s10546-015-0010-3, Eq. 10.
+    This correction was also applied in the Basel lab analysis script.
+    For correction, the UNCALIBRATED wind speed is used (Based on the Basel
+    code). Temperature based on speed of sound and crosswind is calculated
+    separately for each sonic axis, and then averaged.
+    This correction is usually up to ~0.1%.
+
+    Calibration of wind speed components:
+    Wind speed along all axes is affected because of flow distortion due to
+    transducer shadowing of the path. The distortion is thus direction
+    dependent.
+    For each sonic, there's a separate calibration file for the u-,
+    v-components and there's one common file for all the sonics to calibrate
+    the w-component. This is done by calling the "correct" function.
+
+    Parameters
+    ----------
+    tc : np.array
+        array containing the transit counts, possibly also humidity data
+        (humidity is not processed due to the lack of documentation)
+    loc : str
+        location of the sonic, used to extract its serial number
+
+    Returns
+    -------
+    uvwt_corr : np.array
+        calibrated and corrected values of wind speed and temperature
+
+    """
+    # Replace values of -10000 (faulty reading on one axis) with NaNs
+    # convert integer counts to floats
+    tc = tc.astype(np.float)
+    # identify correct measurements: rows with all values > -10000
+    correct_rows = (tc > -10000).all(axis=1)
+    # if there are faulty rows, replace those with zeros
+    if np.sum(correct_rows < tc.shape[0]):
+        tc = (tc.T * correct_rows).T
+        tc[tc == 0] = np.nan
+
     # 6 channels: ax1 tc1, ax1 tc2, ax2 tc1, ax2 tc2, ax3 tc1, ax3 tc2
     # get axis velocity av: av = 0.5*pathlength*freq*(1/tc1 - 1/tc2)  [m/s]
     av1 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 0] - 1/tc[:, 1])
@@ -178,17 +235,21 @@ def uncalibrated_uvwt_from_tc(tc):
     av3 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 4] - 1/tc[:, 5])
 
     # get wind components from axis velocities (based on geometry)
+    # these are RAW values: u > 0 points to 150deg, v > 0 points to 240deg
     u = (2*av1 - av2 - av3) / 2.1213
     v = (av2 - av3) / 1.2247
     w = (-av1 - av2 - av3) / 2.1213
 
-    # The Basel lab in their analysis applied a correction based on a paper:
-    # DOI 10.1007/s10546-015-0010-3
+    # The Basel lab in their analysis applied a correction
     # The correction ends up being less than 0.01%, why even bother...
     # get speed of sound: separately for each axis, then average
     c1 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 0] + 1/tc[:, 1])
     c2 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 2] + 1/tc[:, 3])
     c3 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 4] + 1/tc[:, 5])
+
+    # for reference: non-corrected temperature calculation
+    t = (c1**2 + c2**2 + c3**2)/402.7 / 3
+
     # get windspeed
     wspd = np.sqrt(u**2 + v**2 + w**2)
     # get components of wspd orthogonal to each path: naming after Basel code
@@ -199,19 +260,28 @@ def uncalibrated_uvwt_from_tc(tc):
     t1 = (c1**2 + vu**2) / 402.7
     t2 = (c2**2 + vv**2) / 402.7
     t3 = (c3**2 + vw**2) / 402.7
-    # average temperature
-    t = (t1 + t2 + t3)/3
+    # average temperature: corrected for the cross-wind component
+    # corrected temp is always higher than the uncorrected one, obviously
+    t_corr = (t1 + t2 + t3)/3
 
-    # for reference: non-corrected temperature calculation
-    # t_notc = (c1**2 + c2**2 + c3**2)/402.7 / 3
+    # extract sonic serial number based on the location: only last 4 digits
+    serial = sonic_SN[loc][-4:]
+    # calibrate uvw
+    u_corr, v_corr, w_corr = correct(u, v, w, serial)
 
-    # make one array from the calculated values
-    uvwt = np.array([u, v, w, t]).T
+    # make one array from the calculated and corrected values
+    # uvwt = np.array([u, v, w, t]).T
+    uvwt_corr = np.array([u_corr, v_corr, w_corr, t_corr]).T
 
-    return uvwt
+    if verbose:
+        correction_ratio = 100*np.max(t_corr/t) - 100
+        if correction_ratio > 0.09:
+            print(correction_ratio)
+
+    return uvwt_corr
 
 
-def ds_from_uvwt(uvwt_full, date):
+def ds_from_uvwt(uvwt_full, date, date_rounded):
     """
     Covnvert the np data array to a dataset containing metadata
 
@@ -227,13 +297,27 @@ def ds_from_uvwt(uvwt_full, date):
 
 
     """
-    # if the full field contains a few points more than 36000, cut those
-    #   if there are fewer points, nothing happens
-    # TODO how many data points are there? what's the frequency?
-    uvwt = uvwt_full[:36000, :]
+    # if the full field contains a few points more than 37500, cut those
+    #   if there are fewer points, nothing happens in this step
+    uvwt = uvwt_full[:37500, :]
 
-    # on the other hand, pad to 36000 for shorter files
-    uvwt = np.pad(uvwt, ((0, 36000-uvwt.shape[0]), (0, 0)),
+    # if files don't start at full 30 min, pad in the beginning
+    # first, based on time, get number of missing measurements (10 per second)
+    if date == date_rounded:
+        missing_front = 0
+    else:
+        missing_front = int(((date - date_rounded).seconds) * freq)
+        # if we'd have more than 18000 points with this padding, pad less
+        if missing_front + uvwt.shape[0] > 37500:
+            missing_front -= (missing_front + uvwt.shape[0] - 37500)
+
+    # second, add rows of NaNs in the beginning of the file
+    uvwt = np.pad(uvwt, ((missing_front, 0), (0, 0)),
+                  'constant', constant_values=np.nan)
+
+    # on the other hand, in this step pad shorter files to 37500
+    missing_end = 37500 - uvwt.shape[0]
+    uvwt = np.pad(uvwt, ((0, missing_end), (0, 0)),
                   'constant', constant_values=np.nan)
 
     # make a dictinary of variables
@@ -244,7 +328,7 @@ def ds_from_uvwt(uvwt_full, date):
     # make a range of time values: use fixed time periods
     timerange_full = pd.date_range(date,
                                    freq=str(1/freq)+'S',
-                                   periods=36000)
+                                   periods=37500)
     # define coordinates
     coords = dict(time=timerange_full)
 
@@ -261,12 +345,38 @@ def ds_from_uvwt(uvwt_full, date):
 
 
 def info_from_filename(file):
+    """
+    Determines the location (tower + level) and the start date and time from
+    the filename
+
+    Parameters
+    ----------
+    file : str
+        Name of the file
+
+    Returns
+    -------
+    loc : str
+        location string denoting tower and level
+    date : pd.Timestamp
+        start of the 30 min period timestamp
+
+    """
     # filename
     filename = os.path.split(file)[1]
     # string containing the time information
     datestring = filename[6:-4]
     # proper timestamp denoting when the file begins
     date = pd.to_datetime(datestring, format='%Y_%j_%H%M%S')
+
+    # get the previous whole half-hour time
+    # (some files start e.g. at 16:04 - in that case, make a 16:00 timestamp)
+    # Define the rounding period to 30 minutes
+    delta = dt.timedelta(minutes=30)
+    # Convert the pandas timestamp to python datetime
+    pydate = date.to_pydatetime()
+    # Round down to nearest 30 min; convert back to pandas timestamp
+    date_rounded = pd.to_datetime(pydate - (pydate - dt.datetime.min) % delta)
 
     # get location and level of the sonic
     if filename[0:5] == 'AG_N2':
@@ -275,26 +385,25 @@ def info_from_filename(file):
         loc = 'F2_2'
     elif filename[0:5] == 'MN_N4':
         loc = 'E2_3'
-    elif filename[0:5] == 'MN_N7':
+    elif filename[0:5] == 'MN_N5':
         loc = 'E2_4'
-    elif filename[0:5] == 'MN_N8':
+    elif filename[0:5] == 'MN_N7':
         loc = 'E2_5'
     elif filename[0:5] == 'RO_N2':
         loc = 'E1_2'
     else:
         loc = None
 
-    return loc, date
+    return loc, date, date_rounded
 
 
 # %%
-counter = 0
 
-# f_raw = f_raw_all[2683]
-for f_raw in f_raw_all[2600:2800]:
+
+for f_raw in f_raw_all[154:155]:
     with open(f_raw, 'rb') as file:
         # get location and time of file
-        loc, date = info_from_filename(f_raw)
+        loc, date, date_30min_floor = info_from_filename(f_raw)
         # get number of analog inputs: 1 at RO_N2, 0 otherwise
         if loc == 'E1_2':
             ai = 1
@@ -319,10 +428,11 @@ for f_raw in f_raw_all[2600:2800]:
 
         # Get the raw transit count array
         try:
-            tc = tc_from_file(raw_bytes, count, bytes_per_row)
+            tc = tc_from_file(raw_bytes, bytes_per_row)
+            corrupt_flag = 'Raw data contained no errors'
         except ValueError:
-            counter += 1
-            tc = tc_from_corrupt_file(raw_bytes, count, bytes_per_row)
+            tc = tc_from_corrupt_file(raw_bytes, bytes_per_row)
+            corrupt_flag = 'Raw data contained corrupt bytes'
 
         # if verbose:
         #     print(count, tc.shape)
@@ -331,15 +441,18 @@ for f_raw in f_raw_all[2600:2800]:
             print('Broken file: {}'.format(os.path.split(f_raw)[1]))
             continue
 
-        if ((tc[:, 0:6] <= -10000) | (tc[:, 0:6] > 15000)).any():
+        if ((tc[:, 0:6] == -10000)).any():
+            print('Blah {}'.format(date))
+
+        if ((tc[:, 0:6] < -10000) | (tc[:, 0:6] > 15000)).any():
             print('Broken file, values out of range')
+            continue
 
         # From the transit counts, get uvwt array
-        uvwt = uncalibrated_uvwt_from_tc(tc)
+        uvwt = uvwt_from_tc(tc, loc)
 
-        continue
         # make a data set from the array, add metadata of variables
-        ds = ds_from_uvwt(uvwt, date)
+        ds = ds_from_uvwt(uvwt, date, date_30min_floor)
 
         # add general metadata
         ds.attrs['frequency [Hz]'] = 20.83
@@ -348,6 +461,8 @@ for f_raw in f_raw_all[2600:2800]:
         ds.attrs['sonic height [m]'] = sonic_height[loc]
         ds.attrs['sonic location [lat, lon]'] = sonic_latlon[loc]
         ds.attrs['tower altitude [m a.s.l.]'] = height_asl[loc]
+        # add information about whether the original file was corrupt
+        ds.attrs['info'] = corrupt_flag
 
         # save data
         if savefiles:
@@ -355,10 +470,3 @@ for f_raw in f_raw_all[2600:2800]:
             output_name = '{}_{}.nc'.format(loc, date.strftime('%Y_%m_%d_%H%M'))
             # save file
             ds.to_netcdf(os.path.join(save_folder, output_name))
-
-print(counter)
-# fig, axes = plt.subplots(nrows=2, ncols=2, figsize=[12,12])
-# axes = axes.flatten()
-# for i in range(4):
-#     axes[i].plot(uvwt[:, i])
-# fig.show()
