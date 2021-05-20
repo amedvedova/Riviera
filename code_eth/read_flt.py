@@ -19,7 +19,7 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
 
 # flag to save files
 savefiles = True
-save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/eth_sonics_hourly/'
+save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/eth_sonics_processed/'
 
 # path to all data from ETH sonics: sorted in subfolders by day of year
 path = "/home/alve/Desktop/Riviera/MAP_subset/data/eth_sonics"
@@ -29,11 +29,7 @@ files_all = sorted(glob.glob(os.path.join(path, '**/H*.flt')))
 # max sampling frequency of the sonic
 freq = 10    # [Hz]
 
-# TODO temporary: for trying out data analysis
-# fs = [f for f in os.listdir() if '.flt' in f]
-
 # loop through all files, read out and store the useful data file by file
-# for filename in files_all:
 for filename in files_all:
 
     # get only the filename within the folder, without the full path
@@ -49,8 +45,6 @@ for filename in files_all:
     fopen = open(filename, 'r')
     # read flt data into one vector
     arr = np.fromfile(fopen, dtype=np.float32)
-
-    print(date, fname, arr.shape)
 
     # number of columns in data: 9000 data points per variable per 30 min
     # 4 variables without krypton: 72000 / 1800 sec / 10 Hz = 4 channels
@@ -82,11 +76,12 @@ for filename in files_all:
     ds.u.attrs = {'units': 'm/s'}
     ds.v.attrs = {'units': 'm/s'}
     ds.w.attrs = {'units': 'm/s'}
-    ds.T.attrs = {'units': 'K'}
+    ds.T.attrs = {'units': 'K',
+                  'info': 'sonic (virtual) temperature'}
 
     # # Add general metadata
     ds.attrs['frequency [Hz]'] = freq
-    ds.attrs['info'] = 'No reference data available; no other conversions were necessary for files from this location.'
+    ds.attrs['info'] = 'No post-processing necessary for files from this location.'
 
     # # sonic metadata
     ds.attrs['sonic tower and level'] = sonic_location[loc]

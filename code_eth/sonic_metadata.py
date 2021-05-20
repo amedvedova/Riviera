@@ -15,6 +15,15 @@ sonic_location = {'A': 'A1 (Bosco di Sotta), lowest level',
                   'G': 'B (Rored), highest level',
                   'H': 'D (Torrazza), only one level'}
 
+sonic_output_name = {'A': 'A1_1',
+                     'B': 'A1_2',
+                     'C': 'A1_3',
+                     'D': 'C_1',
+                     'E': 'B_1',
+                     'F': 'B_2',
+                     'G': 'B_3',
+                     'H': 'D_1'}
+
 # serial numbers of sonics, info from metadata report
 sonic_SN = {'A': 'Gill R2A 0068',
             'B': 'Gill R2A 0069',

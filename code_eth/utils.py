@@ -6,14 +6,34 @@
 import numpy as np
 import pandas as pd
 import os
-from sonic_metadata import height_asl, sonic_height, krypton_calibrations
+from sonic_metadata import height_asl, sonic_height, krypton_calibrations, \
+                           sonic_output_name
 
 
 # %% FUNCTIONS FOR MAKING PARTS OF THE DATASET
 
 def make_namestrings(fname):
+    """
+    Parse the file name in order to determine the location of the sonic,
+    starting date+time of the measurement, and make the name of the outpt file
+
+    Parameters
+    ----------
+    fname : str
+        name of the input filem without the full path
+
+    Returns
+    -------
+    loc : str
+        sonic location + level
+    date : pd.Timestamp
+        beginning of measurement period
+    output_name : TYPE
+        name of the output file - contains location and date as well
+
+    """
     # parse filename for time information
-    loc = fname[0]       # sonic identification letter
+    loc = fname[0]       # sonic identification letter, after ETH convention
     DoY = fname[1:4]     # day of year
     hh = fname[4:6]      # hour of day
     mm = fname[6:8]      # minutes of hour
@@ -23,7 +43,8 @@ def make_namestrings(fname):
     date = pd.to_datetime(datestring, format='%Y-%j-%H%M')
 
     # create a name for the output file: location + date + time
-    output_name = '{}-{}.nc'.format(loc, date.strftime('%Y%m%d-%H%M'))
+    output_name = '{}_{}.nc'.format(sonic_output_name[loc],
+                                    date.strftime('%Y_%m_%d_%H%M'))
 
     return loc, date, output_name
 
@@ -48,7 +69,7 @@ def get_reference_data(path, loc, fname, time_index):
     measured at the Bosco di Sotta station. Two more columns hold rain and net
     radiation data which we don't need here.
 
-    Reference data is not available for the entire period.
+    Reference data is NOT available for the entire campaign period.
 
     Parameters
     ----------
@@ -60,13 +81,14 @@ def get_reference_data(path, loc, fname, time_index):
         filename: full path to the file where high frequency data is stored.
         The name pattern of reference data corresponds to the name of the
         reference data.
-    time_index : TYPE
-        DESCRIPTION.
+    time_index : pd.DateTimeIndex
+        pandas index denoting times when the two 30-min periods are beginning
 
     Returns
     -------
-    ref_data : TYPE
-        DESCRIPTION.
+    ref_data : pd.DataFrame
+        reference data: local temperature, relative humidity and pressure, and
+        reference pressure and temperature.
 
     '''
 
@@ -117,6 +139,11 @@ def get_hourly_vars(df):
     t_h = df.t.mean()
     rh_h = df.rh.mean()
     p_h = df.p.mean()
+
+    # Make sure pressure is in Pa, not in hPa
+    if p_h < 6e4:
+        p_h = p_h*100
+
     # get hourly vapor pressure and density of water vapor from those
     e_h, rho_wv_h, rho_air_h = get_e_and_rho(t_h, rh_h, p_h)
 
@@ -125,18 +152,46 @@ def get_hourly_vars(df):
 
 def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min,
                              date, loc, ref_data):
+    """
+    prepare dictionaries with all the variables and coordinates needed to make
+    a xarray dataset
+
+    Parameters
+    ----------
+    arr : np.array
+        Array holding the raw uvwt values
+    timerange_full : pd.DateTimeIndex
+        timestamps corresponding to the high frequency data
+    timerange_30min : pd.DateTimeIndex
+        timestamps corresponding to the 30-min reference data
+    date : pd.Timestamp
+        timestamp denoting the beginning of the 1h period
+    loc : str
+        sonic location
+    ref_data : pd.DataFrame
+        reference 30-min data
+
+    Returns
+    -------
+    data_vars : dict
+        all variables for the desired xarray Dataset
+    coords : dict
+        coordinates to be used in the xarray Dataset
+
+    """
     # convert u, v, w from cm/s to m/s
     arr[:, [0, 1, 2]] = arr[:, [0, 1, 2]] / 100.0
-    # convert speed of sound to temperature (in Kelvin)
-    arr[:, 3] = get_temperature(arr[:, 3], ref_data)
-    # Information about how temperature was calculated
-    T_info = 'Temperature calculated with the use of reference data, taking into account pressure and humidity.'
+    # convert speed of sound to virtual temperature (in Kelvin)
+    T = get_sonic_temperature(arr[:, 3])
+    # get actual absolute (non-sonic) temperature
+    T_abs = get_abs_temperature(arr[:, 3], ref_data)
 
     # Data variables to make the dataset
     data_vars = dict(u=('time', arr[:, 0]),
                      v=('time', arr[:, 1]),
                      w=('time', arr[:, 2]),
-                     T=('time', arr[:, 3]),
+                     T=('time', T),
+                     T_abs=('time', T_abs),
                      T_30min=('time_30min', ref_data.t),
                      rh_30min=('time_30min', ref_data.rh),
                      p_30min=('time_30min', ref_data.p * 100))  # convert to Pa
@@ -160,31 +215,50 @@ def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min,
         data_vars['rho_wv_1h'] = ('time_1h', [rho_wv_h])     # Air density [g/m^3]
         data_vars['rho_air_1h'] = ('time_1h', [rho_air_h])   # Water vapor density [g/m^3]
 
-    return data_vars, coords, T_info
+    return data_vars, coords
 
 
 def prepare_ds_no_ref_data(arr, timerange_full, date):
+    """
+    prepare dictionaries with all the variables and coordinates needed to make
+    a xarray dataset
+
+    Parameters
+    ----------
+    arr : np.array
+        Array holding the raw uvwt values
+    timerange_full : pd.DateTimeIndex
+        timestamps corresponding to the high frequency data
+    date : pd.Timestamp
+        timestamp denoting the beginning of the 1h period
+
+    Returns
+    -------
+    data_vars : dict
+        all variables for the desired xarray Dataset
+    coords : dict
+        coordinates to be used in the xarray Dataset
+
+    """
     # convert u, v, w from cm/s to m/s
     arr[:, [0, 1, 2]] = arr[:, [0, 1, 2]] / 100.0
     # convert speed of sound to temperature (in Kelvin)
-    arr[:, 3] = get_temp_simplified(arr[:, 3])
-    # Information about how temperature was calculated
-    T_info = 'Temperature calculated WITHOUT reference data, only from speed of sound.'
+    T = get_sonic_temperature(arr[:, 3])
 
     # Data variables to make the dataset
     data_vars = dict(u=('time', arr[:, 0]),
                      v=('time', arr[:, 1]),
                      w=('time', arr[:, 2]),
-                     T=('time', arr[:, 3]))
+                     T=('time', T))
     coords = dict(time=timerange_full,
                   time_1h=date)
-    return data_vars, coords, T_info
+    return data_vars, coords
 
 
 def get_krypton_calibration(loc, ln_V_mean, rho_hourly):
     '''
-    # TODO what's going on here? I still don't fully understand why they
-    convert it this way, using Taylor expansions around the mean.
+    # I still don't fully understand why they convert it this way, using Taylor
+    expansions around the mean...
     Original documentation:
     Using the mean hourly density ("rom"), this function calculates the
     instantaneous density for every possible signal (0 ... 5000mV) of the
@@ -272,7 +346,8 @@ def get_krypton_calibration(loc, ln_V_mean, rho_hourly):
         d3det = d2det - 2*B2*d_lnv
 
         # where d3det is positive, calculate drodlnv
-        d_rho_d_lnv = np.where(d3det > 0, d2det**2 / d3det, 0)
+        with np.errstate(invalid='ignore'):
+            d_rho_d_lnv = np.where(d3det > 0, d2det**2 / d3det, 0)
     else:
         # if above condition is not fulfilled, make an array of zeors
         d_rho_d_lnv = np.zeros(5000)
@@ -282,7 +357,8 @@ def get_krypton_calibration(loc, ln_V_mean, rho_hourly):
     # calclate density as a function of voltage for all 5000 values
     rho = d_rho + rho_hourly
     # if there are negative values, round to zero
-    rho = np.where(rho < 0, 0, rho)
+    with np.errstate(invalid='ignore'):
+        rho = np.where(rho < 0, 0, rho)
 
     return rho
 
@@ -373,9 +449,6 @@ def get_e_and_rho(t_hourly, rh_hourly, p_hourly):
     # Make sure temperature is in Kelvin
     if t_hourly < 200:
         t_hourly = t_hourly + 273.16
-    # Make sure pressure is in Pa, not in hPa
-    if p_hourly < 7e4:
-        p_hourly = p_hourly*100
 
     # Compute the saturation vapour pressure e_s[hPa] from t_hourly
     T_frac = 373.16/t_hourly
@@ -408,8 +481,8 @@ def get_e_and_rho(t_hourly, rh_hourly, p_hourly):
     return e_hourly, rho_water_vapor_hourly, rho_air_hourly
 
 
-def get_temperature(sos, ref_data):
-    '''
+def get_abs_temperature(sos, ref_data):
+    """
     Calculates temperature from speed of sound in moist air
     Formula from original script edi2000v2.f - they adapted it most likely
     from https://doi.org/10.1175/1520-0469(1949)006<0273:PROTMB>2.0.CO;2
@@ -430,21 +503,22 @@ def get_temperature(sos, ref_data):
     T : array
         temperature
 
-    '''
+    """
     # get average hourly variables
     t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h = get_hourly_vars(ref_data)
 
     # get temperature from speed of sound
     # first division by 50 because the instrument saves data as 1/50 m/s
-    T = ((sos/50)/20.067)**2 / (1+0.3192*(e_h/p_h))
+
+    frac = 1 + 0.3192*(e_h/p_h)
+    T = (sos * 0.02)**2 / 403 / frac
     return T
 
 
-def get_temp_simplified(sos):
-    '''
-    Simplified formula for getting temperature from speed of sound - does not
-    take into account pressure and humidity changes. Taken from read_slt.m
-    script from Iva
+def get_sonic_temperature(sos):
+    """
+    Simplified formula for getting virtual temperature from speed of sound -
+    it does not take into account pressure and humidity changes.
 
     The 0.02 comes from the way how the sonic stores the speed of sound data,
     i.e. this calculation is based on the eqn. T = c^2 / 403
@@ -459,7 +533,7 @@ def get_temp_simplified(sos):
     T : array
         temperature
 
-    '''
+    """
     T = (sos * 0.02)**2 / 403
     return T
 
@@ -489,7 +563,8 @@ def get_humidity(loc, voltage, rho_air_hourly, rho_wv_hourly):
     '''
     # I think that the original script did it over 30 min periods?
     # calculate logarithm of 1h mean voltage from the krypton
-    ln_v_mean = np.log(np.nanmean(voltage))
+    with np.errstate(invalid='ignore'):
+        ln_v_mean = np.log(np.nanmean(voltage))
 
     # get reference rho based on ln_v: 5000 values for each possible voltage
     rho_ref = get_krypton_calibration(loc, ln_v_mean, rho_wv_hourly)

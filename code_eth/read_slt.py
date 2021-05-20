@@ -14,26 +14,27 @@ import os
 
 # local imports
 from utils import make_namestrings, make_time_arrays, get_reference_data, \
-                  get_hourly_vars, get_temperature, get_temp_simplified, \
-                  get_humidity, prepare_ds_with_ref_data, \
-                  prepare_ds_no_ref_data
+                  prepare_ds_with_ref_data, prepare_ds_no_ref_data
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl, \
                            krypton_SN, krypton_height, krypton_calibrations
 
 
+verbose = True
+
 # flag to save files, output folder
 savefiles = True
-save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/eth_sonics_hourly/'
+save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/eth_sonics_processed/'
 
 # path to all data from ETH sonics: sorted in subfolders by day of year
 path = "/home/alve/Desktop/Riviera/MAP_subset/data/eth_sonics"
 # list all .SLT files in all subfolders
-files_all = sorted(glob.glob(os.path.join(path, '**/F*.SLT')))
+files_all = sorted(glob.glob(os.path.join(path, '**/*.SLT')))
 
 # max sampling frequency of the sonics: 75000 data points per hour
-# some data files contain fewer points, but all at least 73500
+# some data files contain fewer points, but all at least 73700
 freq = 75000 / 60 / 60    # 20.833 Hz
+
 
 # loop through all files, read out and store the useful data file by file
 for filename in files_all:
@@ -49,8 +50,9 @@ for filename in files_all:
     #     if output_name in os.listdir(save_folder):
     #         continue
 
-    # For debigging and seeing conversion progress
-    print(date, filename)
+    # For debugging and seeing conversion progress
+    if verbose:
+        print(date, filename)
 
     # make a range of time values: use fixed time periods
     timerange_full, timerange_30min = make_time_arrays(date, freq)
@@ -90,20 +92,22 @@ for filename in files_all:
     # to get specific humidity and vapor pressure. If not available: None.
     ref_data = get_reference_data(path, loc, fname, timerange_30min)
 
+    if ref_data is None:
+        continue
     # prepare data to make the dataset, based reference data availability
     # get hourly averages, if available
     if ref_data is not None:
-        data_vars, coords, T_info = prepare_ds_with_ref_data(arr,
-                                                             timerange_full,
-                                                             timerange_30min,
-                                                             date,
-                                                             loc,
-                                                             ref_data)
+        data_vars, coords = prepare_ds_with_ref_data(arr,
+                                                     timerange_full,
+                                                     timerange_30min,
+                                                     date,
+                                                     loc,
+                                                     ref_data)
     # If reference data is not available
     else:
-        data_vars, coords, T_info = prepare_ds_no_ref_data(arr,
-                                                           timerange_full,
-                                                           date)
+        data_vars, coords = prepare_ds_no_ref_data(arr,
+                                                   timerange_full,
+                                                   date)
 
     # Make dataset
     # ds = xr.Dataset(data_vars=data_vars,
@@ -117,11 +121,10 @@ for filename in files_all:
     ds.v.attrs = {'units': 'm/s'}
     ds.w.attrs = {'units': 'm/s'}
     ds.T.attrs = {'units': 'K',
-                  'info': T_info}
+                  'info': 'sonic (virtual) temperature'}
 
     # Add general metadata
-    ds.attrs['frequency [Hz]'] = freq
-    ds.attrs['info'] = 'If there are NaNs at the end of the file, these were added manually to make the length of the file 75000.'
+    ds.attrs['frequency [Hz]'] = 20.83
 
     # sonic metadata
     ds.attrs['sonic tower and level'] = sonic_location[loc]
@@ -140,7 +143,6 @@ for filename in files_all:
                             'info': 'raw voltage used to calculate humidity, see the "calibration_coeffs" attribute',
                             'calibration_coeffs': krypton_calibrations[loc],
                             'calibration_coeffs_info': 'Calibration coefficients for the given Krypton, in the order:     [B0, B1, B2, k_w_dry, k_w_wet, ln_V0_dry, ln_V0_wet, tube_separation_x]'}
-
 
     # add reference data if it exists its metadata, if available also humidity
     if ref_data is not None:
@@ -163,6 +165,9 @@ for filename in files_all:
                                 'info': 'Hourly average of water vapor density'}
             ds.rho_air_1h.attrs = {'units': 'g/m^3',
                                    'info': 'Hourly average of air density'}
+        if 'T_abs' in ds.variables:
+            ds.T_abs.attrs = {'units': 'K',
+                              'info': 'Absolute temperature (takes humidity into account)'}
     # If reference data is not available, explain so in an attribute
     else:
         ds.attrs['reference data'] = 'Not available; temperature had to be calculated with a simplified formula, humidity data not available or cannot be caculated.'

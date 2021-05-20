@@ -46,7 +46,7 @@ FREQ = 29.4912e6        # [Hz] Freq of ultrasonic pulse
 PATHLENGTH = 0.149      # [m] Distance between sonic heads
 
 # flag to save files, folder to which files will be saved
-savefiles = False
+savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
 # paths to data from the MCR sonics
@@ -67,7 +67,7 @@ freq = 37500/1800
 
 # concatenate the two lists
 # TODO process all files, not only a subset
-n = 100
+n = 50
 f_raw_all = files_ag_N2[:n] + files_ag_N4[:n] + files_mn_N4[:n] + \
             files_mn_N5[:n] + files_mn_N7[:n] + files_ro_N2[:n]
 # f_raw_all = files_ag_N2 + files_ag_N4 + files_mn_N4 + \
@@ -400,7 +400,7 @@ def info_from_filename(file):
 # %%
 
 
-for f_raw in f_raw_all[154:155]:
+for f_raw in f_raw_all:
     with open(f_raw, 'rb') as file:
         # get location and time of file
         loc, date, date_30min_floor = info_from_filename(f_raw)
@@ -440,9 +440,6 @@ for f_raw in f_raw_all[154:155]:
         if tc.shape[0] / count < 0.95:
             print('Broken file: {}'.format(os.path.split(f_raw)[1]))
             continue
-
-        if ((tc[:, 0:6] == -10000)).any():
-            print('Blah {}'.format(date))
 
         if ((tc[:, 0:6] < -10000) | (tc[:, 0:6] > 15000)).any():
             print('Broken file, values out of range')
