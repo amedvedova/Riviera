@@ -39,14 +39,14 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
 from gill_calibrate import get_all_corrections as correct
 
 
-verbose = True
+verbose = False
 
-# constants and utils etc
+# constants
 FREQ = 29.4912e6        # [Hz] Freq of ultrasonic pulse
 PATHLENGTH = 0.149      # [m] Distance between sonic heads
 
 # flag to save files, folder to which files will be saved
-savefiles = True
+savefiles = False
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
 # paths to data from the MCR sonics
@@ -67,9 +67,11 @@ freq = 37500/1800
 
 # concatenate the two lists
 # TODO process all files, not only a subset
-n = 50
-f_raw_all = files_ag_N2[:n] + files_ag_N4[:n] + files_mn_N4[:n] + \
-            files_mn_N5[:n] + files_mn_N7[:n] + files_ro_N2[:n]
+n = 1000
+f_raw_all = files_ag_N2[:n] + files_ag_N4[:n] 
+# + files_mn_N4[:n] + \
+#             files_mn_N5[:n] + files_mn_N7[:n] + files_ro_N2[:n]
+
 # f_raw_all = files_ag_N2 + files_ag_N4 + files_mn_N4 + \
 #             files_mn_N5 + files_mn_N7 + files_ro_N2
 
@@ -123,7 +125,7 @@ def tc_from_file(raw_bytes, bytes_per_row):
     return tc
 
 
-def tc_from_corrupt_file(raw_bytes, bytes_per_row):
+def tc_from_corrupt_file(raw_bytes, bytes_per_row, count):
     """
     Another function to read in the raw bytes and try to parse them into an
     array, based on the number of channels (bytes_per_row) - 6 channels
@@ -166,6 +168,13 @@ def tc_from_corrupt_file(raw_bytes, bytes_per_row):
     channels = int((bytes_per_row - 2) / 2)
     # turn into an array with channels as columns
     tc = np.frombuffer(cleaned_bytes, dtype='>{}i2'.format(channels))
+
+    # Check: if there are more than 10% of fauty rows, return None
+    # Run this check before we insert NaNs to missing measurements
+    if tc.shape[0] / count < 0.90:
+        if verbose:
+            print('Broken file: {}'.format(os.path.split(f_raw)[1]))
+        return None
 
     # Remove first column (counter) and last column (check bytes)
     # we'll be left with 6/7 columns
@@ -218,15 +227,15 @@ def uvwt_from_tc(tc, loc):
         calibrated and corrected values of wind speed and temperature
 
     """
-    # Replace values of -10000 (faulty reading on one axis) with NaNs
-    # convert integer counts to floats
-    tc = tc.astype(np.float)
-    # identify correct measurements: rows with all values > -10000
+    # Replace values of -10000 (faulty reading on one axis) with NaNs:
+    # first identify correct measurements: rows with all values > -10000
     correct_rows = (tc > -10000).all(axis=1)
+    # change type to float
+    tc = tc.astype(np.float)
     # if there are faulty rows, replace those with zeros
     if np.sum(correct_rows < tc.shape[0]):
         tc = (tc.T * correct_rows).T
-        tc[tc == 0] = np.nan
+        tc = np.where(tc == 0, np.nan, tc)
 
     # 6 channels: ax1 tc1, ax1 tc2, ax2 tc1, ax2 tc2, ax3 tc1, ax3 tc2
     # get axis velocity av: av = 0.5*pathlength*freq*(1/tc1 - 1/tc2)  [m/s]
@@ -248,7 +257,7 @@ def uvwt_from_tc(tc, loc):
     c3 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 4] + 1/tc[:, 5])
 
     # for reference: non-corrected temperature calculation
-    t = (c1**2 + c2**2 + c3**2)/402.7 / 3
+    t = (c1**2 + c2**2 + c3**2)/403 / 3
 
     # get windspeed
     wspd = np.sqrt(u**2 + v**2 + w**2)
@@ -257,9 +266,9 @@ def uvwt_from_tc(tc, loc):
     vv = np.sqrt(wspd**2 - av2**2)
     vw = np.sqrt(wspd**2 - av3**2)
     # get temperature along each axis from speed of sound and correction
-    t1 = (c1**2 + vu**2) / 402.7
-    t2 = (c2**2 + vv**2) / 402.7
-    t3 = (c3**2 + vw**2) / 402.7
+    t1 = (c1**2 + vu**2) / 403
+    t2 = (c2**2 + vv**2) / 403
+    t3 = (c3**2 + vw**2) / 403
     # average temperature: corrected for the cross-wind component
     # corrected temp is always higher than the uncorrected one, obviously
     t_corr = (t1 + t2 + t3)/3
@@ -275,8 +284,8 @@ def uvwt_from_tc(tc, loc):
 
     if verbose:
         correction_ratio = 100*np.max(t_corr/t) - 100
-        if correction_ratio > 0.09:
-            print(correction_ratio)
+        if correction_ratio > 0.2:
+            print('Correction ratio: {:.4f}'.format(correction_ratio))
 
     return uvwt_corr
 
@@ -399,7 +408,6 @@ def info_from_filename(file):
 
 # %%
 
-
 for f_raw in f_raw_all:
     with open(f_raw, 'rb') as file:
         # get location and time of file
@@ -414,8 +422,8 @@ for f_raw in f_raw_all:
 
         # get filesize in bytes
         size = os.path.getsize(f_raw)
-        # for extremely small files (arbitrarily chosen to circa 15%): skip
-        if size < 5000:
+        # Skip extremely small files (20kB). Complete files are >500 kB.
+        if size < 20000:
             continue
 
         # get count of measurements: (size/10)-1 since each measurement is
@@ -431,19 +439,13 @@ for f_raw in f_raw_all:
             tc = tc_from_file(raw_bytes, bytes_per_row)
             corrupt_flag = 'Raw data contained no errors'
         except ValueError:
-            tc = tc_from_corrupt_file(raw_bytes, bytes_per_row)
+            tc = tc_from_corrupt_file(raw_bytes, bytes_per_row, count)
             corrupt_flag = 'Raw data contained corrupt bytes'
 
-        # if verbose:
-        #     print(count, tc.shape)
-        # if there are more than 5% or broken data entries, skip the file
-        if tc.shape[0] / count < 0.95:
-            print('Broken file: {}'.format(os.path.split(f_raw)[1]))
-            continue
-
-        if ((tc[:, 0:6] < -10000) | (tc[:, 0:6] > 15000)).any():
-            print('Broken file, values out of range')
-            continue
+            # if there are more than 10% or broken data entries, None is
+            #   returned by the function and the file is skipped
+            if tc is None:
+                continue
 
         # From the transit counts, get uvwt array
         uvwt = uvwt_from_tc(tc, loc)

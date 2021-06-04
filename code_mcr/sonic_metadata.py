@@ -57,8 +57,8 @@ sonic_height = {'E1_1': 2.0,
                 'E2_5': 16.82,
                 'E2_6': 22.68,
                 'F1_1': 6.3,
-                'F2_1': None,
-                'F2_2': None,
+                'F2_1': 3.1,
+                'F2_2': 11.0,
                 'G_1':  5.25}
 
 # geographical location of towers

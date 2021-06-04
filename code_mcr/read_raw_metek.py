@@ -18,17 +18,15 @@ import datetime as dt
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
 
-# TODO 
 # TODO check with Iva about what to do
 # DoY 212 - DoY 214 8:30 OR DoY 216 22:30 saved as summer CET, not CET
-# TODO check the daily cycles to determine time?
 # DoY 216 - 218 missing anyway
 # since there's no distinct daiy cycle on the first few days, this is not
 # possible to determine
 
 
 # flag to save files, folder to which files will be saved
-savefiles = True
+savefiles = False
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
 # path to data from the MCR sonics at "mn" location
@@ -36,14 +34,11 @@ path = "/home/alve/Desktop/Riviera/MAP_subset/data/ro/rohdaten/fast"
 
 # list  .raw and files in all subfolders (day of year)
 # N1 refers to the level where the Metek sonic was used
-files_ro_N1 = sorted(glob.glob(os.path.join(path, '**/RO_N1_*.raw')))
+f_raw_all = sorted(glob.glob(os.path.join(path, '**/RO_N1_*.raw')))
 
 # frequency of Metek sonic
 freq = 10
 
-# TODO process all files, not only a subset
-f_raw_all = files_ro_N1[0:183]
-# f_raw_all = files_ro_N1
 
 # %% Function definitions
 
@@ -200,14 +195,6 @@ def info_from_filename(file):
     return loc, date, date_rounded
 
 
-def fix_time(time):
-    # at the Maruso-Roasco location, on days of year 212-BLAH the measurements
-    # were recorded ic summer CET instead of CET. Afterwards, all time was
-    # recorded in CET. For consistency, the first few days
-    # are changed to CET. 
-    return time
-
-
 # %%
 
 for f_raw in f_raw_all:
@@ -225,10 +212,13 @@ for f_raw in f_raw_all:
         # use the line separator to identify lines: Each has 41 characters
         lines = raw_text.split('\n')
         # get count of measurements
-        count = len(lines)
-        print(date, count)
+        # count = len(lines)
+        # print(date, count)
+
         # load data from the buffer, process it and make and uvwt array
         uvwt = uvwt_from_file(lines)
+
+        continue
         # make a data set from the array, add metadata of variables
         ds = ds_from_uvwt(uvwt, date, date_30min_floor)
 
@@ -246,9 +236,3 @@ for f_raw in f_raw_all:
             output_name = '{}_{}.nc'.format(loc, date_30min_floor.strftime('%Y_%m_%d_%H%M'))
             # save file
             ds.to_netcdf(os.path.join(save_folder, output_name))
-
-
-# fig, axes = plt.subplots(nrows=2, ncols=2, figsize=[12,12])
-# axes = axes.flatten()
-# for i in range(4):
-#     axes[i].plot(uvwt[:, i])

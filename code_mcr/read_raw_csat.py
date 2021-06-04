@@ -33,10 +33,6 @@ import datetime as dt
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
 
-
-# set minimum number of values which must be present in the file to process it
-count_threshold = 35000
-
 # flag to save files, folder to which files will be saved
 savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
@@ -45,7 +41,7 @@ save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed
 path = "/home/alve/Desktop/Riviera/MAP_subset/data/mn/rohdaten/fast"
 
 # list N1/N3 .raw and files in all subfolders (day of year)
-# N1/N3 refers to levels where CSAT3 sonics were used
+# N1/N3 refers to levels where CSAT3 sonics were used at Monte Nuovo
 files_mn_N1 = sorted(glob.glob(os.path.join(path, '**/MN_N1_*.raw')))
 files_mn_N3 = sorted(glob.glob(os.path.join(path, '**/MN_N3_*.raw')))
 
@@ -53,7 +49,6 @@ files_mn_N3 = sorted(glob.glob(os.path.join(path, '**/MN_N3_*.raw')))
 freq = 20
 
 # concatenate the two lists
-# f_raw_all = files_mn_N1[:10] + files_mn_N3[:10]
 f_raw_all = files_mn_N1 + files_mn_N3
 
 
@@ -260,7 +255,7 @@ def info_from_filename(file):
 
 # %%
 
-for f_raw in f_raw_all:
+for f_raw in f_raw_all[0:10]:
     with open(f_raw, 'rb') as file:
         # get location and time of file
         loc, date, date_30min_floor = info_from_filename(f_raw)
