@@ -1,0 +1,23 @@
+options         : kalibrierung/behandlung als array der form [a,b,c,d]
+
+a ist METHODE
+1= pure (mit standardpfadlängen bei r2)
+2= gillr2 herstellerklaibrierung (nur r2)
+3= matrixkalibrerierung windkanal
+
+b ist behandlung der PFADLÄNGEN (nur wirksam bei x=1, 2 und 3 und ausschliesslich bei r2's)
+0= keine effektiven pfadlängen, standard 0.149 (default)
+1= windkanal99 pfadlängen
+2= sanvittore pfadlängen
+
+c ist behandlung des detrendings
+0= kein detrending
+1= lineares detrending
+3= mittelwertentfernung im frequenzraum
+
+d ist rotation/ausrichtung
+0= keine drehung (original geräteintern)
+1= u+ nach ggN, v+ nach ggE w senkrecht (GEOGRAPHIC)
+2= u+ longitudinal, v+ lateral rechtsdrehend (STREAMLINE)
+3= u+ points slope upwards and v+ lies in the contour line uv plane slope parallel
+4= u+ points slope upwards and v+ lies in the contour line uv plane streamline
