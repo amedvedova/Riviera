@@ -29,52 +29,87 @@
 import numpy as np
 import pandas as pd
 import xarray as xr
-import matplotlib.pyplot as plt
 import glob
 import os
 import datetime as dt
 
+# local imports
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
-                           sonic_latlon, height_asl
-from gill_calibrate import get_all_corrections as correct
+                           sonic_latlon, height_asl, gill_pathlengths, \
+                           windtunnel_pathlengths
+from gill_calibration import get_all_corrections as correct_gill
+from matrix_calibration import get_all_corrections as correct_matrix
 
 
-verbose = False
+# settings: calibration, pathlengths, etc.
+temperature_correction = 'before_calibration'
+# temperature_correction = 'after_calibration'
+# temperature_correction = None
 
+# pathlength_type = 'sanvittore'
+pathlength_type = 'default'
+
+# calibration = 'matrix'
+calibration = 'gill'
+# calibration = None
+
+
+verbose = True
+
+# %%
 # constants
-FREQ = 29.4912e6        # [Hz] Freq of ultrasonic pulse
-PATHLENGTH = 0.149      # [m] Distance between sonic heads
+FREQ = 29.4912e6      # [Hz] Freq of ultrasonic pulse used to get transit count
+
 
 # flag to save files, folder to which files will be saved
-savefiles = False
+savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
+
+# empty the directory
+for file in os.listdir(save_folder):
+    os.remove(os.path.join(save_folder, file))
 
 # paths to data from the MCR sonics
 path_ag = "/home/alve/Desktop/Riviera/MAP_subset/data/ag/rohdaten/fast"
 path_mn = "/home/alve/Desktop/Riviera/MAP_subset/data/mn/rohdaten/fast"
 path_ro = "/home/alve/Desktop/Riviera/MAP_subset/data/ro/rohdaten/fast"
 
-# list all relevant .raw and files in all subfolders (day of year)
-files_ag_N2 = sorted(glob.glob(os.path.join(path_ag, '**/AG_N2_*.raw')))
-files_ag_N4 = sorted(glob.glob(os.path.join(path_ag, '**/AG_N4_*.raw')))
-files_mn_N4 = sorted(glob.glob(os.path.join(path_mn, '**/MN_N4_*.raw')))
-files_mn_N5 = sorted(glob.glob(os.path.join(path_mn, '**/MN_N5_*.raw')))
-files_mn_N7 = sorted(glob.glob(os.path.join(path_mn, '**/MN_N7_*.raw')))
-files_ro_N2 = sorted(glob.glob(os.path.join(path_ro, '**/RO_N2_*.raw')))
 
-# frequency of Gill R2 sonics
-freq = 37500/1800
+# list all relevant .raw and files in all subfolders (day of year)
+join = os.path.join
+files_ag_N2 = sorted(glob.glob(join(path_ag, '**/AG_N2_*.raw')))  # 208 F21
+files_ag_N4 = sorted(glob.glob(join(path_ag, '**/AG_N4_*.raw')))  # 160 F22
+files_mn_N4 = sorted(glob.glob(join(path_mn, '**/MN_N4_*.raw')))  # 211 E23
+files_mn_N5 = sorted(glob.glob(join(path_mn, '**/MN_N5_*.raw')))  # 213 E24
+files_mn_N7 = sorted(glob.glob(join(path_mn, '**/MN_N7_*.raw')))  # 212 E25
+files_ro_N2 = sorted(glob.glob(join(path_ro, '**/RO_N2_*.raw')))  # 043 E12
+
 
 # concatenate the two lists
 # TODO process all files, not only a subset
-n = 1000
-f_raw_all = files_ag_N2[:n] + files_ag_N4[:n] 
-# + files_mn_N4[:n] + \
-#             files_mn_N5[:n] + files_mn_N7[:n] + files_ro_N2[:n]
+# TODO check if the files are as the ones in the database: correct settings?
+n = 180
+
+
+if calibration == 'matrix':
+    # matrix calibrated: 160, 212, 43
+    f_raw_all = files_ag_N4[n:n+24] + files_mn_N7[n:n+24] + files_ro_N2[n:n+24]
+elif calibration == 'gill':
+    # gill calibrated: 211, 213, 208
+    f_raw_all = files_ag_N2[n:n+24] + files_mn_N4[n:n+24] + files_mn_N5[n:n+24]
+else:
+    f_raw_all = files_ag_N4[n:n+24] + files_mn_N7[n:n+24] + files_ro_N2[n:n+24] + \
+                files_ag_N2[n:n+24] + files_mn_N4[n:n+24] + files_mn_N5[n:n+24]
 
 # f_raw_all = files_ag_N2 + files_ag_N4 + files_mn_N4 + \
 #             files_mn_N5 + files_mn_N7 + files_ro_N2
 
+
+f_raw_all = files_ag_N4[n:n+24] + files_mn_N7[n:n+24] + files_ro_N2[n:n+24] + \
+                files_ag_N2[n:n+24] + files_mn_N4[n:n+24] + files_mn_N5[n:n+24]
+
+f_raw_all = files_ag_N2[n:n+24]
+            
 
 # %% Function definitions
 
@@ -183,7 +218,9 @@ def tc_from_corrupt_file(raw_bytes, bytes_per_row, count):
     return tc
 
 
-def uvwt_from_tc(tc, loc):
+def uvwt_from_tc(tc, loc, calibration='matrix',
+                 pathlength_type='sanvittore',
+                 temperature_correction=None):
     """
     Function to calculate the wind speed components and temperature from the
     transit counts.
@@ -227,6 +264,9 @@ def uvwt_from_tc(tc, loc):
         calibrated and corrected values of wind speed and temperature
 
     """
+    # extract sonic serial number based on the location: only last 4 digits
+    serial = sonic_SN[loc]
+
     # Replace values of -10000 (faulty reading on one axis) with NaNs:
     # first identify correct measurements: rows with all values > -10000
     correct_rows = (tc > -10000).all(axis=1)
@@ -237,11 +277,17 @@ def uvwt_from_tc(tc, loc):
         tc = (tc.T * correct_rows).T
         tc = np.where(tc == 0, np.nan, tc)
 
+    # get pathlengths for the given Gill sonic, or use defaults
+    if pathlength_type == 'sanvittore':
+        pathlengths = gill_pathlengths[loc]
+    elif pathlength_type == 'default':
+        pathlengths = [0.149, 0.149, 0.149]
+
     # 6 channels: ax1 tc1, ax1 tc2, ax2 tc1, ax2 tc2, ax3 tc1, ax3 tc2
     # get axis velocity av: av = 0.5*pathlength*freq*(1/tc1 - 1/tc2)  [m/s]
-    av1 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 0] - 1/tc[:, 1])
-    av2 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 2] - 1/tc[:, 3])
-    av3 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 4] - 1/tc[:, 5])
+    av1 = 0.5 * pathlengths[0] * FREQ * (1/tc[:, 0] - 1/tc[:, 1])
+    av2 = 0.5 * pathlengths[1] * FREQ * (1/tc[:, 2] - 1/tc[:, 3])
+    av3 = 0.5 * pathlengths[2] * FREQ * (1/tc[:, 4] - 1/tc[:, 5])
 
     # get wind components from axis velocities (based on geometry)
     # these are RAW values: u > 0 points to 150deg, v > 0 points to 240deg
@@ -249,43 +295,50 @@ def uvwt_from_tc(tc, loc):
     v = (av2 - av3) / 1.2247
     w = (-av1 - av2 - av3) / 2.1213
 
-    # The Basel lab in their analysis applied a correction
-    # The correction ends up being less than 0.01%, why even bother...
-    # get speed of sound: separately for each axis, then average
-    c1 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 0] + 1/tc[:, 1])
-    c2 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 2] + 1/tc[:, 3])
-    c3 = 0.5 * PATHLENGTH * FREQ * (1/tc[:, 4] + 1/tc[:, 5])
+    # apply corrections
+    if calibration == 'matrix':
+        # calibrate uvw with matrix calibration files: needs full serial no.
+        u_corr, v_corr, w_corr = correct_matrix(u, v, w, serial)
+    elif calibration == 'gill':
+        # calibrate uvw with manufacturer files: needs only R2 number
+        u_corr, v_corr, w_corr = correct_gill(u, v, w, serial[-4:])
+    else:
+        # apply no corrections, use raw values
+        u_corr = u
+        v_corr = v
+        w_corr = w
 
-    # for reference: non-corrected temperature calculation
-    t = (c1**2 + c2**2 + c3**2)/403 / 3
+    # get speed of sound: separate for each axis
+    # The Basel lab in their analysis applied a cross-wind correction
+    c1 = 0.5 * pathlengths[0] * FREQ * (1/tc[:, 0] + 1/tc[:, 1])
+    c2 = 0.5 * pathlengths[1] * FREQ * (1/tc[:, 2] + 1/tc[:, 3])
+    c3 = 0.5 * pathlengths[2] * FREQ * (1/tc[:, 4] + 1/tc[:, 5])
 
-    # get windspeed
-    wspd = np.sqrt(u**2 + v**2 + w**2)
-    # get components of wspd orthogonal to each path: naming after Basel code
-    vu = np.sqrt(wspd**2 - av1**2)
-    vv = np.sqrt(wspd**2 - av2**2)
-    vw = np.sqrt(wspd**2 - av3**2)
-    # get temperature along each axis from speed of sound and correction
-    t1 = (c1**2 + vu**2) / 403
-    t2 = (c2**2 + vv**2) / 403
-    t3 = (c3**2 + vw**2) / 403
-    # average temperature: corrected for the cross-wind component
-    # corrected temp is always higher than the uncorrected one, obviously
-    t_corr = (t1 + t2 + t3)/3
+    if temperature_correction is None:
+        # non-corrected temperature calculation
+        t = (c1**2 + c2**2 + c3**2)/402.7 / 3
+    else:
+        if temperature_correction == 'before_calibration':
+            # get windspeed from raw wind components
+            wspd = np.sqrt(u**2 + v**2 + w**2)
+        elif temperature_correction == 'after_calibration':
+            # get windspeed from corrected wind components
+            wspd = np.sqrt(u_corr**2 + v_corr**2 + w_corr**2)
 
-    # extract sonic serial number based on the location: only last 4 digits
-    serial = sonic_SN[loc][-4:]
-    # calibrate uvw
-    u_corr, v_corr, w_corr = correct(u, v, w, serial)
+        # get components of wind speed orthogonal to each path
+        vu = np.sqrt(wspd**2 - av1**2)
+        vv = np.sqrt(wspd**2 - av2**2)
+        vw = np.sqrt(wspd**2 - av3**2)
+        # get temperature along each axis from speed of sound and correction
+        t1 = (c1**2 + vu**2) / 402.7
+        t2 = (c2**2 + vv**2) / 402.7
+        t3 = (c3**2 + vw**2) / 402.7
+        # average temperature: corrected for the cross-wind component
+        # corrected temp is always higher than the uncorrected one, obviously
+        t = (t1 + t2 + t3)/3
 
     # make one array from the calculated and corrected values
-    # uvwt = np.array([u, v, w, t]).T
-    uvwt_corr = np.array([u_corr, v_corr, w_corr, t_corr]).T
-
-    if verbose:
-        correction_ratio = 100*np.max(t_corr/t) - 100
-        if correction_ratio > 0.2:
-            print('Correction ratio: {:.4f}'.format(correction_ratio))
+    uvwt_corr = np.array([u_corr, v_corr, w_corr, t]).T
 
     return uvwt_corr
 
@@ -315,7 +368,7 @@ def ds_from_uvwt(uvwt_full, date, date_rounded):
     if date == date_rounded:
         missing_front = 0
     else:
-        missing_front = int(((date - date_rounded).seconds) * freq)
+        missing_front = int(((date - date_rounded).seconds) * 37500/1800)
         # if we'd have more than 18000 points with this padding, pad less
         if missing_front + uvwt.shape[0] > 37500:
             missing_front -= (missing_front + uvwt.shape[0] - 37500)
@@ -336,7 +389,7 @@ def ds_from_uvwt(uvwt_full, date, date_rounded):
                      T=('time', uvwt[:, 3]))
     # make a range of time values: use fixed time periods
     timerange_full = pd.date_range(date,
-                                   freq=str(1/freq)+'S',
+                                   freq=str(1800/37500)+'S',
                                    periods=37500)
     # define coordinates
     coords = dict(time=timerange_full)
@@ -447,8 +500,11 @@ for f_raw in f_raw_all:
             if tc is None:
                 continue
 
-        # From the transit counts, get uvwt array
-        uvwt = uvwt_from_tc(tc, loc)
+        # From the transit counts, get uvwt array, applying a calibration
+        uvwt = uvwt_from_tc(tc, loc,
+                            calibration=calibration,
+                            pathlength_type=pathlength_type,
+                            temperature_correction=temperature_correction)
 
         # make a data set from the array, add metadata of variables
         ds = ds_from_uvwt(uvwt, date, date_30min_floor)
@@ -466,6 +522,9 @@ for f_raw in f_raw_all:
         # save data
         if savefiles:
             # produce output name based on time and location
-            output_name = '{}_{}.nc'.format(loc, date.strftime('%Y_%m_%d_%H%M'))
+            output_name = '{}_{}.nc'.format(loc,
+                                            date.strftime('%Y_%m_%d_%H%M'))
             # save file
             ds.to_netcdf(os.path.join(save_folder, output_name))
+
+import check_Gill_values

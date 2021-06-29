@@ -197,8 +197,9 @@ def info_from_filename(file):
 
 # %%
 
-for f_raw in f_raw_all:
+for f_raw in f_raw_all[0:3]:
     with open(f_raw, encoding='ascii') as file:
+        print(f_raw)
         # get location and time of file from the filename
         loc, date, date_30min_floor = info_from_filename(f_raw)
 
@@ -218,7 +219,6 @@ for f_raw in f_raw_all:
         # load data from the buffer, process it and make and uvwt array
         uvwt = uvwt_from_file(lines)
 
-        continue
         # make a data set from the array, add metadata of variables
         ds = ds_from_uvwt(uvwt, date, date_30min_floor)
 

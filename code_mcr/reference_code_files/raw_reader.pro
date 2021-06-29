@@ -32,18 +32,27 @@
 ;                 0= keine effektiven pfadlängen, standard 0.149 (default)
 ;                 1= windkanal99 pfadlängen
 ;                 2= sanvittore pfadlängen
-;;
+;
+;   silent      : keyword zur unterdrückung der online-messages (errors kommen trotzdem)
+;
 ; OUTPUT:
 ;	array(x,r) mit x: u,v,w,t,(a1),(a2),...
 ;              und r: anzahl records
 ;
+; EXAMPLE:
+;   uvwt=raw_reader() -> Dialogbox kommt
+;   uvwt=raw_reader('m:\data\sonic\MAP 001\vgl\sonics1\195\V1_05_1999_195_170000.raw',kalmet=[3,2])
+;
 ; REVISION HISTORY:
+;   17.09.99 AC (MAP)
 ;   17.02.00 AC Bei R2 möglichkeit nur transit counts (default) oder diverse kalibrierungen
 ;   29.02.00 AC Matrix-Kalibrierung nun auch möglich.
 ;   03.03.00 AC gill hs angepasst an neues einlese programm, fehler korrigiert bei matrix.
 ;   24.03.00 AC gill hs matrix wird IMMER mit keyword extra ausgelesen. d.h. annahme dass daten schon gill-
 ;               kalibriert sind.
-
+;   27.03.00 AC änderung an einleseroutinen adaptiert. 0 fällt weg.
+;   11.04.00 AC Umschlaufung für Sensorkorrektur mn
+;-
 
 function raw_reader, filepfadarray, kalmet=kalmet, silent=silent
 
@@ -52,11 +61,18 @@ function raw_reader, filepfadarray, kalmet=kalmet, silent=silent
 	kelvin2celsius=-273.15
 	rrdata=0
 
+	if n_elements(filepfadarray) gt 0 then begin
+					;nichts
+	endif else begin
+		filepfadarray=dialog_pickfile(/multiple_files, /must_exist, title='Wähle Sonic-Rohdatenfiles (Multi Select)', filter='*.raw')
+	endelse
+
 	if keyword_set(kalmet) then begin
 		kalmet=fix(kalmet)
 	endif else begin
 		kalmet=[0,0]
 	endelse
+
 
 
 
@@ -102,10 +118,20 @@ function raw_reader, filepfadarray, kalmet=kalmet, silent=silent
 
 			if no_of_errors eq 0 then begin
 
+				;daten einlesen
+				if keyword_set(silent) then begin
+					;nichts
+				endif else begin
+					print,'message from <raw_reader.pro>: Daten einlesen von : '+strmid(logi(sensor).datafilename,0,21)+' (Analog-Inputs: '+strmid(strcompress(string(anz_ai),/remove_all),0,1)+'; Typ: '+strcompress(sensor_type)+')'
+				endelse
+
 				;einlesen
 				case logi(sensor).sensor_type of
+					'Campbell CSAT 3 ':  eingelesen=csat_in_array(filepfadarray(a))
 					'Gill R2         ':  eingelesen=gillr2_in_tc(filepfadarray(a),anz_ai=anz_ai)
 					'Gill HS         ':  eingelesen=gillhs_in_array(filepfadarray(a),anz_ai)
+					'METEK USA-1     ':  eingelesen=metek_in_array(filepfadarray(a))
+					else: print, 'error in <raw_reader.pro>: unbekannter sensortyp in '+rawpath
 				endcase
 
 				;sensornummer
@@ -117,6 +143,13 @@ function raw_reader, filepfadarray, kalmet=kalmet, silent=silent
 
 					raw=eingelesen
 					case kalmet(0) of
+						1: begin
+							getsoncal_map,cson,kallw,kalpfad,tpfak=tpfak,/no_eff_path
+							if kalmet(1) eq 1 then getsoncal_map,cson,kallw,kalpfad,tpfak=tpfak
+							if kalmet(1) eq 2 then getsoncal_map,cson,kallw,kalpfad,tpfak=tpfak,/vito
+							eingelesen=r2cal(raw,cson,tpfak,/pure)
+							print, 'message from <raw_reader.pro>: Kalibriere mit Methode: PURE'
+						   end
 						2: begin
 							gill=1
 							getsoncal_map,cson,kallw,kalpfad,gill=gill,tpfak=tpfak,/no_eff_path
@@ -146,7 +179,9 @@ function raw_reader, filepfadarray, kalmet=kalmet, silent=silent
 						eingelesen(3:6,*)=eingelesen(3:6,*)+kelvin2celsius
 						mitteltemp=0
 					endif
-				endif
+				endif else begin
+					if logi(sensor).sensor_type eq 'Gill R2         ' then begin
+						eingelesen=-1 ;fehler beim einlesen von r2s
 
 
 				;kalibrieren nicht r2-sonics (csat, hs, metek) -------------------------------------------------
@@ -201,9 +236,19 @@ function raw_reader, filepfadarray, kalmet=kalmet, silent=silent
 					rrdata=[[rrdata],[eingelesen]] ; alle weiteren files werden angehängt
 				endelse
 
-			endif
+			endif else begin
+				print,'error in <raw_reader.pro>: Fehler in der Datenerfassung von : '+strmid(logi(sensor).datafilename,0,21)+' wurden nicht eingelesen. (Mehr Infos im log-file'+logfilepfad+')'
+				rrdata=-1
+			endelse
+
+		endelse
 		endfor
 
 	return, rrdata
+
+	;aufräumen
+	rrdata=0
+	eingelesen=0
+	logi=0
 
 end

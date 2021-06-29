@@ -88,7 +88,11 @@ if sonicstring in ['A11', 'A13', 'B2']:
 # %% Data processing
 
 # get 30 min averages of the needed variables from the high-resolution dataset
-ds_30min = ds[['wspd', 'T', 'q']].resample(time='30min').mean(dim='time')
+variables = ['wspd', 'T']
+if sonicstring in ['A11', 'A13', 'B2']:
+    variables = ['wspd', 'T', 'q']
+
+ds_30min = ds[variables].resample(time='30min').mean(dim='time')
 
 # get voltage and try to see if I can get the Basel-like values
 # all calibration coefficients are in the attributes
@@ -140,5 +144,6 @@ if sonicstring in ['A11', 'A13', 'B2']:
     if verbose:
         print(q_abs.values)
         # Huh, values of 35g/m^3 at below 20C, this seems wrong.
+        # https://www.tis-gdv.de/tis_e/misc/klima-htm/
         # Thus, no point in comparing!
         print(AHA_30min.values.squeeze())

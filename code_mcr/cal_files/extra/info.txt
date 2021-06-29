@@ -1,0 +1,2 @@
+entsprechen den xp_hs46 und xn_hs46 und sind einfachheitshalber hierherkopiert, 
+damit sie mit der aml-lib einfach verwendet werden können

@@ -1,0 +1,24 @@
+METEK USA-1
+"Empirischer Drehrichtungstest" 12.01.99 AC
+
+u negativ = Wind von Norden
+u positiv = Wind von Süden
+
+v negativ = Wind von Osten
+v positiv = Wind von Westen
+
+w negativ = Wind von oben
+w positiv = Wind von unten
+
+Koordinatenachsen Aufsicht uv folglich
+
+               u+
+  N            ^
+  |            |
+  |            |
+  |            |
+  o------ E    o------> v+    
+
+  0 = hier z nach oben
+
+  METEK ist folglich linksdrehend

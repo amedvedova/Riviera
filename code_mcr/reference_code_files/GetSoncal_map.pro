@@ -151,6 +151,7 @@ pro getsoncal_map,cson,lw,pfad, $
 
   if keyword_set(HS) then begin
     if cson eq 'HS46' then uv_finam = 'HS46.cal'
+    if cson eq 'HS101' then uv_finam = 'HS101.cal'
     gill_uv = dblarr(2,360)
     openr,lun,lw+pfad+uv_finam,/get_lun
     readf,lun,gill_uv

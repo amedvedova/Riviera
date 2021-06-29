@@ -255,7 +255,7 @@ def info_from_filename(file):
 
 # %%
 
-for f_raw in f_raw_all[0:10]:
+for f_raw in f_raw_all:
     with open(f_raw, 'rb') as file:
         # get location and time of file
         loc, date, date_30min_floor = info_from_filename(f_raw)
