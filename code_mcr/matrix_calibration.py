@@ -7,9 +7,6 @@ import numpy as np
 import pandas as pd
 import os
 
-# local imports
-from sonic_metadata import gill_pathlengths
-
 
 # Debug settings: print errors etc
 verbose = True
@@ -135,14 +132,14 @@ def calibrate(u, v, w, p_calib, n_calib, angle):
     u_corr[w_pos] = u[w_pos] * p[w_pos, 0] + v[w_pos] * p[w_pos, 1] + \
                     w[w_pos] * p[w_pos, 2] + p[w_pos, 3]
     v_corr[w_pos] = u[w_pos] * p[w_pos, 4] + v[w_pos] * p[w_pos, 5] + \
-                    w[w_pos] * p[w_pos, 5] + p[w_pos, 7]
+                    w[w_pos] * p[w_pos, 6] + p[w_pos, 7]
     w_corr[w_pos] = u[w_pos] * p[w_pos, 8] + v[w_pos] * p[w_pos, 9] + \
                     w[w_pos] * p[w_pos, 10] + p[w_pos, 11]
     # Get corrected u/v/w values where w < 0
     u_corr[w_neg] = u[w_neg] * n[w_neg, 0] + v[w_neg] * n[w_neg, 1] + \
                     w[w_neg] * n[w_neg, 2] + n[w_neg, 3]
     v_corr[w_neg] = u[w_neg] * n[w_neg, 4] + v[w_neg] * n[w_neg, 5] + \
-                    w[w_neg] * n[w_neg, 5] + n[w_neg, 7]
+                    w[w_neg] * n[w_neg, 6] + n[w_neg, 7]
     w_corr[w_neg] = u[w_neg] * n[w_neg, 8] + v[w_neg] * n[w_neg, 9] + \
                     w[w_neg] * n[w_neg, 10] + n[w_neg, 11]
 

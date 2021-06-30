@@ -35,19 +35,19 @@ import datetime as dt
 
 # local imports
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
-                           sonic_latlon, height_asl, gill_pathlengths, \
-                           windtunnel_pathlengths
+                           sonic_latlon, height_asl, gill_pathlengths
 from gill_calibration import get_all_corrections as correct_gill
 from matrix_calibration import get_all_corrections as correct_matrix
 
 
-# settings: calibration, pathlengths, etc.
+# settings: calibration, pathlengths, etc.: use "before cal." for everything!
 temperature_correction = 'before_calibration'
 # temperature_correction = 'after_calibration'
 # temperature_correction = None
 
-# pathlength_type = 'sanvittore'
-pathlength_type = 'default'
+# use sanvittore for all "E" locations, default for "F2" location
+pathlength_type = 'sanvittore'
+# pathlength_type = 'default'
 
 # calibration = 'matrix'
 calibration = 'gill'
@@ -88,9 +88,7 @@ files_ro_N2 = sorted(glob.glob(join(path_ro, '**/RO_N2_*.raw')))  # 043 E12
 # concatenate the two lists
 # TODO process all files, not only a subset
 # TODO check if the files are as the ones in the database: correct settings?
-n = 180
-
-
+n = 200
 if calibration == 'matrix':
     # matrix calibrated: 160, 212, 43
     f_raw_all = files_ag_N4[n:n+24] + files_mn_N7[n:n+24] + files_ro_N2[n:n+24]
@@ -105,11 +103,11 @@ else:
 #             files_mn_N5 + files_mn_N7 + files_ro_N2
 
 
-f_raw_all = files_ag_N4[n:n+24] + files_mn_N7[n:n+24] + files_ro_N2[n:n+24] + \
-                files_ag_N2[n:n+24] + files_mn_N4[n:n+24] + files_mn_N5[n:n+24]
+# f_raw_all = files_ag_N4[n:n+24] + files_mn_N7[n:n+24] + files_ro_N2[n:n+24] + \
+#                 files_ag_N2[n:n+24] + files_mn_N4[n:n+24] + files_mn_N5[n:n+24]
 
-f_raw_all = files_ag_N2[n:n+24]
-            
+# f_raw_all = files_ag_N4[n:n+24] + files_mn_N7[n:n+24] + files_ro_N2[n:n+24]
+
 
 # %% Function definitions
 
@@ -526,5 +524,3 @@ for f_raw in f_raw_all:
                                             date.strftime('%Y_%m_%d_%H%M'))
             # save file
             ds.to_netcdf(os.path.join(save_folder, output_name))
-
-import check_Gill_values

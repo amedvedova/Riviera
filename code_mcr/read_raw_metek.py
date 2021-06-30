@@ -9,12 +9,12 @@
 import numpy as np
 import pandas as pd
 import xarray as xr
-import matplotlib.pyplot as plt
 import glob
 import os
 import datetime as dt
 
-
+# local imports
+from matrix_calibration import get_all_corrections as correct_matrix
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
 
@@ -24,9 +24,11 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
 # since there's no distinct daiy cycle on the first few days, this is not
 # possible to determine
 
+# flag: use the Uni Basel matrix calibration for the Metek sonic
+calibrate = True
 
 # flag to save files, folder to which files will be saved
-savefiles = False
+savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
 # path to data from the MCR sonics at "mn" location
@@ -37,13 +39,13 @@ path = "/home/alve/Desktop/Riviera/MAP_subset/data/ro/rohdaten/fast"
 f_raw_all = sorted(glob.glob(os.path.join(path, '**/RO_N1_*.raw')))
 
 # frequency of Metek sonic
-freq = 10
+freq = 10  # [Hz]
 
 
 # %% Function definitions
 
 
-def uvwt_from_file(lines):
+def uvwt_from_file(lines, calibrate=True):
     """
     Function for reading the opened file (buffer) and converting the data to
     a numpy array with u, v, w, T variables. All calculations and processing
@@ -51,8 +53,11 @@ def uvwt_from_file(lines):
 
     Parameters
     ----------
-    file : list
+    lines : list
         list of strings, one line = one measurement
+    calibrate : bool, optional
+        Flag - should the matrix calibration from Uni Basel be applied to the
+        raw data? The default is True.
 
     Returns
     -------
@@ -67,8 +72,9 @@ def uvwt_from_file(lines):
 
     # loop through the first 18000 lines of each file, re-scale all values
     for i, l in enumerate(lines):
-        # check if all values are present
+        # check if all values are present: 41 characters per line
         if len(l) == 41:
+            # read strings of uvwt values, convert to Kelvin
             uvwt[i, 0] = float(l[6:12]) / 100.0
             uvwt[i, 1] = float(l[16:22]) / 100.0
             uvwt[i, 2] = float(l[26:32]) / 100.0
@@ -77,23 +83,39 @@ def uvwt_from_file(lines):
         else:
             continue
 
+    # apply calibration to match the database (30-min averages)
+    if calibrate:
+        # serial number of the sonic, needed for calibration
+        serial = 'Metek USA-1 9903006'
+        # separate components, turned for calibration
+        u_corr, v_corr, w_corr = correct_matrix(-1 * uvwt[:, 0],    # -u
+                                                -1 * uvwt[:, 1],    # -v
+                                                uvwt[:, 2],         # w
+                                                serial)
+        # assign components back, turn back u and v
+        uvwt[:, 0] = -1 * u_corr
+        uvwt[:, 1] = -1 * v_corr
+        uvwt[:, 2] = w_corr
     return uvwt
 
 
 def ds_from_uvwt(uvwt_full, date, date_rounded):
     """
-    Covnvert the np data array to a dataset containing metadata
+    Convert the np data array to a dataset containing metadata
 
     Parameters
     ----------
     uvwt_full : np.array
+        array holding the uvwt values
     date : Timestamp
         timestamp of the beginning of the measurement period
+    date_rounded : Timestamo
+        Date rounded down to the last previous half-hour, used for filename
 
     Returns
     -------
     ds : xr.Dataset
-
+        dataset with all the uvwt values, including coordinates
 
     """
     # if the full field contains a few points more than 18000, cut those, and
@@ -195,9 +217,10 @@ def info_from_filename(file):
     return loc, date, date_rounded
 
 
-# %%
+# %% Production step: make .nc files
 
-for f_raw in f_raw_all[0:3]:
+# loop through list of files
+for f_raw in f_raw_all:
     with open(f_raw, encoding='ascii') as file:
         print(f_raw)
         # get location and time of file from the filename
@@ -212,9 +235,6 @@ for f_raw in f_raw_all[0:3]:
 
         # use the line separator to identify lines: Each has 41 characters
         lines = raw_text.split('\n')
-        # get count of measurements
-        # count = len(lines)
-        # print(date, count)
 
         # load data from the buffer, process it and make and uvwt array
         uvwt = uvwt_from_file(lines)

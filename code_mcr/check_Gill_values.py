@@ -34,11 +34,12 @@ path_bin = '/home/alve/Desktop/Riviera/MAP_subset/data/database/data/bin/'
 path_data = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
 # choose some random files to load and compare (not all combinations work)
+# TODO AHA E12 (humidity)
 # tower = 'E1_2'  # matrix
-# tower = 'E2_3'  # gill
+tower = 'E2_3'  # gill
 # tower = 'E2_4'  # gill
 # tower = 'E2_5'  # matrix
-tower = 'F2_1'  # gill
+# tower = 'F2_1'  # gill
 # tower = 'F2_2'  # matrix
 
 # %% load high-resolution and database data
@@ -67,8 +68,6 @@ ds_30min = ds[var].resample(time='30min').mean(dim='time', skipna=True)
 # change K to C
 ds_30min['T'] = ds_30min['T'] - 273.15
 
-# clsoe the file so it can be overwritten... or use context manager instead
-ds.close()
 
 # %%
 
@@ -101,32 +100,38 @@ def xdr_to_series(var):
 
 # %% ATA
 
-ATA_asc = asc_to_series('ATA')
-ATA_30min = ATA_asc.loc[ds_30min.time.values]
+# ATA_asc = asc_to_series('ATA')
+# ATA_30min = ATA_asc.loc[ds_30min.time.values]
 
-# Figure + values: compare temperatures
-fig, ax = plt.subplots(figsize=[12, 12])
-ds_30min.T.plot(ax=ax)
-ATA_30min.plot(ax=ax)
-fig.show()
+# # Figure + values: compare temperatures
+# fig, ax = plt.subplots(figsize=[12, 12])
+# ds_30min.T.plot(ax=ax)
+# ATA_30min.plot(ax=ax)
+# fig.show()
 
-if verbose:
-    print(ds_30min.T.values)
-    print(ATA_30min.values.squeeze())
+# if verbose:
+#     print(ds_30min.T.values)
+#     print(ATA_30min.values.squeeze())
 
 # %% MSA
 
-# MSA_xdr = xdr_to_series('MSA')
-# MSA_30min = MSA_xdr.loc[ds_30min.time.values]
-
-# # Figure + values: compare wind speeds
-# fig, ax = plt.subplots(figsize=[12, 12])
-# ds_30min.wspd.plot(ax=ax)
-# MSA_30min.plot(ax=ax)
-
-# if verbose:
-#     print(ds_30min.wspd.values)
-#     print(MSA_30min.values.squeeze())
+try:
+    MSA_xdr = xdr_to_series('MSA')
+    MSA_30min = MSA_xdr.loc[ds_30min.time.values]
+    
+    # Figure + values: compare wind speeds
+    fig, ax = plt.subplots(figsize=[12, 12])
+    ds_30min.wspd.plot(ax=ax, label='high freq')
+    MSA_30min.plot(ax=ax, label='database')
+    ax.legend(fontsize=16)
+    
+    if verbose:
+        print('WINDSPEED')
+        print(ds_30min.wspd.values)
+        print(MSA_30min.values.squeeze())
+        print('')
+except FileNotFoundError:
+    pass
 
 
 # %% USA VSA WSA
@@ -150,8 +155,15 @@ if verbose:
 # WSA_30min.plot(ax=axes[2])
 
 # if verbose:
-#     print('High-res wind data:')
+#     print('U WIND')
+#     print(ds_30min.u.values)
+#     print(USA_30min.values.squeeze())
+#     print('')
+#     print('V WIND')
+#     print(ds_30min.v.values)
+#     print(VSA_30min.values.squeeze())
+#     print('')
+#     print('W WIND')
 #     print(ds_30min.w.values)
-#     print('Low-res wind data:')
-#     # print(WSA_30min.values.squeeze())
-#     print(WSA_xdr_30min.values.squeeze())
+#     print(WSA_30min.values.squeeze())
+#     print('')

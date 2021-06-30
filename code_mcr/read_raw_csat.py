@@ -25,13 +25,17 @@
 import numpy as np
 import pandas as pd
 import xarray as xr
-import matplotlib.pyplot as plt
 import glob
 import os
 import datetime as dt
 
+# local imports
+from matrix_calibration import get_all_corrections as correct_matrix
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
+
+# flag: use the Uni Basel matrix calibration for the CSAT3 sonics
+calibrate = True
 
 # flag to save files, folder to which files will be saved
 savefiles = True
@@ -46,7 +50,7 @@ files_mn_N1 = sorted(glob.glob(os.path.join(path, '**/MN_N1_*.raw')))
 files_mn_N3 = sorted(glob.glob(os.path.join(path, '**/MN_N3_*.raw')))
 
 # frequency of CSAT3 sonics
-freq = 20
+freq = 20   # [Hz]
 
 # concatenate the two lists
 f_raw_all = files_mn_N1 + files_mn_N3
@@ -85,7 +89,7 @@ def range_from_binary(col_1, col_2):
     return mul_factor
 
 
-def uvwt_from_file(file, count):
+def uvwt_from_file(file, count, serial, calibrate=True):
     """
     Function for reading the opened file (buffer) and converting the data to
     a numpy array with u, v, w, T variables. All calculations and processing
@@ -95,7 +99,13 @@ def uvwt_from_file(file, count):
     ----------
     file : _io.BufferedReader
         opened file of the raw binary data
-
+    count : int
+        number of lines holding the data, i.e. number of measurements
+    serial : str
+        serial number of the CSAT sonic
+    calibrate : bool, optional
+        Flag - should the matrix calibration from Uni Basel be applied to the
+        raw data? The default is True.
 
     Returns
     -------
@@ -103,6 +113,7 @@ def uvwt_from_file(file, count):
         numpy array holding the processed values of u, v, w, T
 
     """
+
     # read raw bytes from the file
     raw_bytes = file.read()
     # Load file as 5 columns of int16 (2 bytes), little-endian byte order ("<")
@@ -132,25 +143,41 @@ def uvwt_from_file(file, count):
     uvwt[:, 2] = uvwt[:, 2] * 0.001 * uz
     uvwt[:, 3] = (uvwt[:, 3] * 0.001 + 340.0)**2 / 403
 
+    # apply calibration to match the database (30-min averages)
+    if calibrate:
+        # separate components, turned wind for calibration
+        u_corr, v_corr, w_corr = correct_matrix(uvwt[:, 0],         # u
+                                                -1 * uvwt[:, 1],    # -v
+                                                uvwt[:, 2],         # w
+                                                serial)
+        # assign components back to the original array, turn v component back
+        uvwt[:, 0] = u_corr
+        uvwt[:, 1] = -1 * v_corr
+        uvwt[:, 2] = w_corr
+
     return uvwt
 
 
 def ds_from_uvwt(uvwt_full, date, date_rounded):
     """
-    Covnvert the np data array to a dataset containing metadata
+    Convert the np data array to a dataset containing metadata
 
     Parameters
     ----------
     uvwt_full : np.array
+        array holding the uvwt values
     date : Timestamp
         timestamp of the beginning of the measurement period
+    date_rounded : Timestamo
+        Date rounded down to the last previous half-hour, used for filename
 
     Returns
     -------
     ds : xr.Dataset
-
+        dataset with all the uvwt values, including coordinates
 
     """
+
     # if the full field contains a few points more than 36000, cut those
     #   if there are fewer points, nothing happens
     uvwt = uvwt_full[:36000, :]
@@ -253,8 +280,9 @@ def info_from_filename(file):
     return loc, date, date_rounded
 
 
-# %%
+# %% Production step: make .nc files
 
+# loop through list of files
 for f_raw in f_raw_all:
     with open(f_raw, 'rb') as file:
         # get location and time of file
@@ -262,11 +290,11 @@ for f_raw in f_raw_all:
         # get filesize in bytes
         size = os.path.getsize(f_raw)
         # get count of measurements: (size/10)-1 since each measurement is
-        # 10 bytes and the first measurement is corrupt
+        # 10 bytes and the first measurement is always corrupt
         count = int((size / 10) - 1)
 
         # load data from the buffer, process it and make and uvwt array
-        uvwt = uvwt_from_file(file, count)
+        uvwt = uvwt_from_file(file, count, sonic_SN[loc], calibrate=calibrate)
         # make a data set from the array, add metadata of variables
         ds = ds_from_uvwt(uvwt, date, date_30min_floor)
 

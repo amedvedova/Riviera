@@ -56,7 +56,6 @@ def get_angle(u, v):
     # get integer angle between 0-359: mod corrects negative values (adds 360)
     angle_int = np.mod(np.round(angle_flt), 360).astype(int)
 
-
     return angle_int
 
 
