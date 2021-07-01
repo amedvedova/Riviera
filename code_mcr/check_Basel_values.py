@@ -7,6 +7,8 @@
 # different sonics: check temperature, humidity, wind components...
 #
 # Variable names in the database:
+# AHA = absolute humidity
+# AHS = abs. hum. st. dev
 # ATA = accoustic temperature
 # MSA = scalar wind speed
 # USA, VSA, WSA = wind components
@@ -23,12 +25,15 @@ import xdrlib
 
 # local imports
 from matrix_calibration import get_all_corrections as correct_matrix
+from gill_calibration import get_all_corrections as correct_gill
 
 
-# Indicates whether the uvw values should be calibrated in this script. Set to
-# true only if the files were not calibrated beforehand.
+# Indicates whether the uvw values should be calibrated in this script. 
+# Set to matrix/gill true only if the files were NOT calibrated beforehand!
+# TODO uncomment wanted calibration
 calibrate = False
 
+# Print information, plot extra figures
 verbose = True
 
 # path to database files with 30 min averages, processed by Basel
@@ -38,50 +43,70 @@ path_bin = '/home/alve/Desktop/Riviera/MAP_subset/data/database/data/bin/'
 # path to processed high resolution Basel data that I want to check
 path_data = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
-# Tower and levels of the CSAT3 sonics
-# tower = 'E2_1'  # 118
-tower = 'E2_2'  # 199
+
+# TODO AHA E12, E26 (humidity)
+
+# Gill sonics: tower+level, calibration, serial number
+# tower = 'E1_2'  # matrix, 043
+tower = 'E2_3'  # gill, 211
+# tower = 'E2_4'  # gill, 213
+# tower = 'E2_5'  # matrix, 212
+# tower = 'F2_1'  # gill, 208
+# tower = 'F2_2'  # matrix, 160
+
+# Metek sonic: tower+level, calibration
+# tower = 'E1_1'  # matrix
+
+# CSAT sonics: tower+level, calibration, serial number
+# tower = 'E2_1'  # matrix, 118
+# tower = 'E2_2'  # matrix, 199
 
 # %% load high-resolution and database data
 
-# get all files for the chosen sonic
+# choose some random files, load the files as one combined data set
 files = sorted([os.path.join(path_data, f) for f in os.listdir(path_data)
-                if tower in f])
-# choose some ~20ish random files to plot
-files = files[10:35]
-# load the high resolution files as one combined data set
+                if tower in f])[10:35]
 ds = xr.open_mfdataset(files,
                        coords=['time'],
                        combine='nested',
                        data_vars=['u', 'v', 'w', 'T', 'q'])
 
-# turn wind
+# prepare variables for possible calibration (not needed if calibration==False)
 u = ds.u.load().values
-v = -1 * ds.v.load().values
+v = ds.v.load().values
 w = ds.w.load().values
 
-# if calibration was not applied before, optionally apply now
+# apply calibration for comparison, only if it has not been applied before
+# if data is already calibrated, this would apply the calibration the 2nd time
 if calibrate:
     # get serial number
     serial = ds.attrs['sonic serial number']
-    # apply matrix calibration
-    u_corr, v_corr, w_corr = correct_matrix(u, v, w, serial)
-
-    # plot uncalibrated and calibrated wind values, to see if everything is ok
-    if verbose:
-        fig, axes = plt.subplots(ncols=3, nrows=1, figsize=[12, 8])
-        axes[0].plot(u_corr)
-        axes[0].plot(u)
-        axes[1].plot(v_corr)
-        axes[1].plot(v)
-        axes[2].plot(w_corr)
-        axes[2].plot(w)
-        print(np.max(np.abs(u-u_corr)))
-
-    # turn v-wind back, assign back corrected wind values
-    u = u_corr
-    v = -1 * v_corr
-    w = w_corr
+    # TODO write a sonic-dependent calibration
+    if 'Gill' in serial:
+        # matrix calibration
+        if serial[-3:] in ['043', '212', '160']:
+            u_corr, v_corr, w_corr = correct_matrix(u, v, w, serial)
+        # gill calibration
+        elif serial[-3:] in ['211', '213', '208']:
+            u_corr, v_corr, w_corr = correct_gill(u, v, w, serial[-4:])
+        # reassign uvw
+        u = u_corr
+        v = v_corr
+        w = w_corr
+    elif 'Metek' in serial:
+        # matrix calibration
+        u_corr, v_corr, w_corr = correct_matrix(-1*u, -1*v, w, serial)
+        # reassign uvw
+        u = -1 * u_corr
+        v = -1 * v_corr
+        w = w_corr
+    elif 'CSAT' in serial:
+        # matrix calibration
+        u_corr, v_corr, w_corr = correct_matrix(u, -1*v, w, serial)
+        # reassign uvw
+        u = u_corr
+        v = -1 * v_corr
+        w = w_corr
 
 
 # add wind speed to data set - separate wind components cannot be compared
@@ -95,13 +120,15 @@ ds['wspd_calib'] = ds.w * 0 + np.sqrt(u**2 + v**2 + w**2)
 sonicstring = tower[0:4].replace('_', '')
 
 # get 30 min averages of the needed variables from the high-resolution dataset
-var = ['u', 'v', 'w', 'wspd', 'T', 'wspd_calib']
+# only two sonics have humidity data
+if tower in ['E1_2', 'E2_6']:
+    var = ['wspd', 'wspd_calib', 'u', 'v', 'w', 'T', 'q']
+else:
+    var = ['wspd', 'wspd_calib', 'u', 'v', 'w', 'T']
 ds_30min = ds[var].resample(time='30min').mean(dim='time', skipna=True)
 
-# I used 403, Basel used 402.7 as the conversion factor between
-#   speed of sounde and temperature, then change K to C
-ds_30min['T'] = ((ds_30min['T']) * 403 / 402.7) - 273.15
-ds_30min.load()
+# change K to C
+ds_30min['T'] = ds_30min['T'] - 273.15
 
 
 # %% Functions to get variable series
@@ -220,39 +247,64 @@ except FileNotFoundError:
     pass
 
 
+# %% AHA: humidity
+
+# use try/except because the MSA file doesn't exist for all sonics
+try:
+    # get 30 min data from the database
+    AHA_asc = asc_to_series('AHA')
+    AHA_30min = AHA_asc.loc[ds_30min.time.values]
+
+    # Figure + values: compare wind speeds
+    fig, ax = plt.subplots(figsize=[12, 12])
+    # compare uncalibrated, calibrated and database values
+    ds_30min.q.plot(ax=ax, label='high freq')
+    # ds_30min.wspd_calib.plot(ax=ax, label='high freq calibrated')
+    AHA_30min.plot(ax=ax, label='database')
+    ax.legend(fontsize=16)
+
+    if verbose:
+        print('HUMIDITY')
+        print(ds_30min.q.values)
+        print(AHA_30min.values.squeeze())
+        print('')
+except FileNotFoundError:
+    pass
+
+
 # %% USA VSA WSA: wind speed components
 # these are not expected to be the same for high-freq and database data since
 # in the original data anaylsis they applied a coordinate transform
 
-# get 30 min data from the database
-USA_xdr = xdr_to_series('USA')
-VSA_xdr = xdr_to_series('VSA')
-WSA_xdr = xdr_to_series('WSA')
+# # get 30 min data from the database
+# USA_xdr = xdr_to_series('USA')
+# VSA_xdr = xdr_to_series('VSA')
+# WSA_xdr = xdr_to_series('WSA')
 
-USA_30min = USA_xdr.loc[ds_30min.time.values]
-VSA_30min = VSA_xdr.loc[ds_30min.time.values]
-WSA_30min = WSA_xdr.loc[ds_30min.time.values]
+# USA_30min = USA_xdr.loc[ds_30min.time.values]
+# VSA_30min = VSA_xdr.loc[ds_30min.time.values]
+# WSA_30min = WSA_xdr.loc[ds_30min.time.values]
 
 
-# Figure + values: compare wind speed w component
-fig, axes = plt.subplots(ncols=3, nrows=1, figsize=[12, 8])
-ds_30min.u.plot(ax=axes[0])
-USA_30min.plot(ax=axes[0])
-ds_30min.v.plot(ax=axes[1])
-VSA_30min.plot(ax=axes[1])
-ds_30min.w.plot(ax=axes[2])
-WSA_30min.plot(ax=axes[2])
+# # Figure + values: compare wind speed w component
+# fig, axes = plt.subplots(ncols=3, nrows=1, figsize=[12, 8])
+# ds_30min.u.plot(ax=axes[0])
+# USA_30min.plot(ax=axes[0])
+# ds_30min.v.plot(ax=axes[1])
+# VSA_30min.plot(ax=axes[1])
+# ds_30min.w.plot(ax=axes[2])
+# WSA_30min.plot(ax=axes[2])
 
-if verbose:
-    print('U WIND')
-    print(ds_30min.u.values)
-    print(USA_30min.values.squeeze())
-    print('')
-    print('V WIND')
-    print(ds_30min.v.values)
-    print(VSA_30min.values.squeeze())
-    print('')
-    print('W WIND')
-    print(ds_30min.w.values)
-    print(WSA_30min.values.squeeze())
-    print('')
+# if verbose:
+#     print('U WIND')
+#     print(ds_30min.u.values)
+#     print(USA_30min.values.squeeze())
+#     print('')
+#     print('V WIND')
+#     print(ds_30min.v.values)
+#     print(VSA_30min.values.squeeze())
+#     print('')
+#     print('W WIND')
+#     print(ds_30min.w.values)
+#     print(WSA_30min.values.squeeze())
+#     print('')

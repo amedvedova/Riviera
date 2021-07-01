@@ -55,6 +55,8 @@ freq = 20   # [Hz]
 # concatenate the two lists
 f_raw_all = files_mn_N1 + files_mn_N3
 
+f_raw_all = files_mn_N1[:50] + files_mn_N3[:50]
+
 
 # %% Function definitions
 
@@ -141,7 +143,7 @@ def uvwt_from_file(file, count, serial, calibrate=True):
     uvwt[:, 0] = uvwt[:, 0] * 0.001 * ux
     uvwt[:, 1] = uvwt[:, 1] * 0.001 * uy
     uvwt[:, 2] = uvwt[:, 2] * 0.001 * uz
-    uvwt[:, 3] = (uvwt[:, 3] * 0.001 + 340.0)**2 / 403
+    uvwt[:, 3] = (uvwt[:, 3] * 0.001 + 340.0)**2 / 402.7
 
     # apply calibration to match the database (30-min averages)
     if calibrate:

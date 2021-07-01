@@ -40,20 +40,6 @@ from gill_calibration import get_all_corrections as correct_gill
 from matrix_calibration import get_all_corrections as correct_matrix
 
 
-# settings: calibration, pathlengths, etc.: use "before cal." for everything!
-temperature_correction = 'before_calibration'
-# temperature_correction = 'after_calibration'
-# temperature_correction = None
-
-# use sanvittore for all "E" locations, default for "F2" location
-pathlength_type = 'sanvittore'
-# pathlength_type = 'default'
-
-# calibration = 'matrix'
-calibration = 'gill'
-# calibration = None
-
-
 verbose = True
 
 # %%
@@ -77,36 +63,12 @@ path_ro = "/home/alve/Desktop/Riviera/MAP_subset/data/ro/rohdaten/fast"
 
 # list all relevant .raw and files in all subfolders (day of year)
 join = os.path.join
-files_ag_N2 = sorted(glob.glob(join(path_ag, '**/AG_N2_*.raw')))  # 208 F21
-files_ag_N4 = sorted(glob.glob(join(path_ag, '**/AG_N4_*.raw')))  # 160 F22
-files_mn_N4 = sorted(glob.glob(join(path_mn, '**/MN_N4_*.raw')))  # 211 E23
-files_mn_N5 = sorted(glob.glob(join(path_mn, '**/MN_N5_*.raw')))  # 213 E24
-files_mn_N7 = sorted(glob.glob(join(path_mn, '**/MN_N7_*.raw')))  # 212 E25
-files_ro_N2 = sorted(glob.glob(join(path_ro, '**/RO_N2_*.raw')))  # 043 E12
-
-
-# concatenate the two lists
-# TODO process all files, not only a subset
-# TODO check if the files are as the ones in the database: correct settings?
-n = 200
-if calibration == 'matrix':
-    # matrix calibrated: 160, 212, 43
-    f_raw_all = files_ag_N4[n:n+24] + files_mn_N7[n:n+24] + files_ro_N2[n:n+24]
-elif calibration == 'gill':
-    # gill calibrated: 211, 213, 208
-    f_raw_all = files_ag_N2[n:n+24] + files_mn_N4[n:n+24] + files_mn_N5[n:n+24]
-else:
-    f_raw_all = files_ag_N4[n:n+24] + files_mn_N7[n:n+24] + files_ro_N2[n:n+24] + \
-                files_ag_N2[n:n+24] + files_mn_N4[n:n+24] + files_mn_N5[n:n+24]
-
-# f_raw_all = files_ag_N2 + files_ag_N4 + files_mn_N4 + \
-#             files_mn_N5 + files_mn_N7 + files_ro_N2
-
-
-# f_raw_all = files_ag_N4[n:n+24] + files_mn_N7[n:n+24] + files_ro_N2[n:n+24] + \
-#                 files_ag_N2[n:n+24] + files_mn_N4[n:n+24] + files_mn_N5[n:n+24]
-
-# f_raw_all = files_ag_N4[n:n+24] + files_mn_N7[n:n+24] + files_ro_N2[n:n+24]
+files_ro_N2 = sorted(glob.glob(join(path_ro, '**/RO_N2_*.raw')))  # 043 E12 m
+files_mn_N4 = sorted(glob.glob(join(path_mn, '**/MN_N4_*.raw')))  # 211 E23 g
+files_mn_N5 = sorted(glob.glob(join(path_mn, '**/MN_N5_*.raw')))  # 213 E24 g
+files_mn_N7 = sorted(glob.glob(join(path_mn, '**/MN_N7_*.raw')))  # 212 E25 m
+files_ag_N2 = sorted(glob.glob(join(path_ag, '**/AG_N2_*.raw')))  # 208 F21 g
+files_ag_N4 = sorted(glob.glob(join(path_ag, '**/AG_N4_*.raw')))  # 160 F22 m
 
 
 # %% Function definitions
@@ -158,7 +120,7 @@ def tc_from_file(raw_bytes, bytes_per_row):
     return tc
 
 
-def tc_from_corrupt_file(raw_bytes, bytes_per_row, count):
+def tc_from_corrupt_file(f_raw, raw_bytes, bytes_per_row, count):
     """
     Another function to read in the raw bytes and try to parse them into an
     array, based on the number of channels (bytes_per_row) - 6 channels
@@ -457,70 +419,123 @@ def info_from_filename(file):
     return loc, date, date_rounded
 
 
-# %%
+def produce_files(filelist,
+                  calibration='matrix',
+                  pathlength_type='sanvittore',
+                  temperature_correction='before_calibration'):
+    # TODO documentation
+    for f_raw in filelist:
+        with open(f_raw, 'rb') as file:
+            # get location and time of file
+            loc, date, date_30min_floor = info_from_filename(f_raw)
+            # get number of analog inputs: 1 at RO_N2, 0 otherwise
+            if loc == 'E1_2':
+                ai = 1
+            else:
+                ai = 0
+            # get no. of bytes in each measurement - depends on analog inputs
+            bytes_per_row = 18 + 2*ai
 
-for f_raw in f_raw_all:
-    with open(f_raw, 'rb') as file:
-        # get location and time of file
-        loc, date, date_30min_floor = info_from_filename(f_raw)
-        # get number of analog inputs: 1 at RO_N2, 0 otherwise
-        if loc == 'E1_2':
-            ai = 1
-        else:
-            ai = 0
-        # get number of bytes in each measurement - depends on analog inputs
-        bytes_per_row = 18 + 2*ai
-
-        # get filesize in bytes
-        size = os.path.getsize(f_raw)
-        # Skip extremely small files (20kB). Complete files are >500 kB.
-        if size < 20000:
-            continue
-
-        # get count of measurements: (size/10)-1 since each measurement is
-        # 10 bytes and the first measurement is corrupt
-        count = int(size / bytes_per_row)
-
-        # load data from the buffer, process it and make and uvwt array
-        # read raw bytes from the file
-        raw_bytes = file.read()
-
-        # Get the raw transit count array
-        try:
-            tc = tc_from_file(raw_bytes, bytes_per_row)
-            corrupt_flag = 'Raw data contained no errors'
-        except ValueError:
-            tc = tc_from_corrupt_file(raw_bytes, bytes_per_row, count)
-            corrupt_flag = 'Raw data contained corrupt bytes'
-
-            # if there are more than 10% or broken data entries, None is
-            #   returned by the function and the file is skipped
-            if tc is None:
+            # get filesize in bytes
+            size = os.path.getsize(f_raw)
+            # Skip extremely small files (20kB). Complete files are >500 kB.
+            if size < 20000:
                 continue
 
-        # From the transit counts, get uvwt array, applying a calibration
-        uvwt = uvwt_from_tc(tc, loc,
-                            calibration=calibration,
-                            pathlength_type=pathlength_type,
-                            temperature_correction=temperature_correction)
+            # get count of measurements: (size/10)-1 since each measurement is
+            # 10 bytes and the first measurement is corrupt
+            count = int(size / bytes_per_row)
 
-        # make a data set from the array, add metadata of variables
-        ds = ds_from_uvwt(uvwt, date, date_30min_floor)
+            # load data from the buffer, process it and make and uvwt array
+            # read raw bytes from the file
+            raw_bytes = file.read()
 
-        # add general metadata
-        ds.attrs['frequency [Hz]'] = 20.83
-        ds.attrs['sonic tower and level'] = sonic_location[loc]
-        ds.attrs['sonic serial number'] = sonic_SN[loc]
-        ds.attrs['sonic height [m]'] = sonic_height[loc]
-        ds.attrs['sonic location [lat, lon]'] = sonic_latlon[loc]
-        ds.attrs['tower altitude [m a.s.l.]'] = height_asl[loc]
-        # add information about whether the original file was corrupt
-        ds.attrs['info'] = corrupt_flag
+            # Get the raw transit count array
+            try:
+                tc = tc_from_file(raw_bytes, bytes_per_row)
+                corrupt_flag = 'Raw data contained no errors'
+            except ValueError:
+                tc = tc_from_corrupt_file(f_raw,
+                                          raw_bytes,
+                                          bytes_per_row,
+                                          count)
+                corrupt_flag = 'Raw data contained corrupt bytes'
 
-        # save data
-        if savefiles:
-            # produce output name based on time and location
-            output_name = '{}_{}.nc'.format(loc,
-                                            date.strftime('%Y_%m_%d_%H%M'))
-            # save file
-            ds.to_netcdf(os.path.join(save_folder, output_name))
+                # if there are more than 10% or broken data entries, None is
+                #   returned by the function and the file is skipped
+                if tc is None:
+                    continue
+
+            # From the transit counts, get uvwt array, applying a calibration
+            uvwt = uvwt_from_tc(tc, loc,
+                                calibration=calibration,
+                                pathlength_type=pathlength_type,
+                                temperature_correction=temperature_correction)
+
+            # make a data set from the array, add metadata of variables
+            ds = ds_from_uvwt(uvwt, date, date_30min_floor)
+
+            # add general metadata
+            ds.attrs['frequency [Hz]'] = 20.83
+            ds.attrs['sonic tower and level'] = sonic_location[loc]
+            ds.attrs['sonic serial number'] = sonic_SN[loc]
+            ds.attrs['sonic height [m]'] = sonic_height[loc]
+            ds.attrs['sonic location [lat, lon]'] = sonic_latlon[loc]
+            ds.attrs['tower altitude [m a.s.l.]'] = height_asl[loc]
+            # add information about whether the original file was corrupt
+            ds.attrs['info'] = corrupt_flag
+
+            # save data
+            if savefiles:
+                # produce output name based on time and location
+                output_name = '{}_{}.nc'.format(loc,
+                                                date.strftime('%Y_%m_%d_%H%M'))
+                # save file
+                ds.to_netcdf(os.path.join(save_folder, output_name))
+    return
+
+
+# %% Production step: different settings for each sonic
+
+# All E-towers use San Vittore pathlengths, F-tower uses default
+# All files: apply cross-wind temperature correction before wind calibration
+# 3 sonics gill calibrated (211, 213, 208)
+# 3 sonics matrix calibrated (160, 212, 43)
+
+n = 200
+
+# ro_N2: 043, E12, matrix, sanvittore
+produce_files(files_ro_N2[n:n+24],
+              calibration='matrix',
+              pathlength_type='sanvittore',
+              temperature_correction='before_calibration')
+
+# mn_N4: 211, E23, gill, sanvittore
+produce_files(files_mn_N4[n:n+24],
+              calibration='gill',
+              pathlength_type='sanvittore',
+              temperature_correction='before_calibration')
+
+# mn_N5: 213, E24, gill, sanvittore
+produce_files(files_mn_N5[n:n+24],
+              calibration='gill',
+              pathlength_type='sanvittore',
+              temperature_correction='before_calibration')
+
+# mn_N7: 212, E25, matrix, sanvittore
+produce_files(files_mn_N7[n:n+24],
+              calibration='matrix',
+              pathlength_type='sanvittore',
+              temperature_correction='before_calibration')
+
+# ag_N2: 213, F21, gill, default
+produce_files(files_ag_N2[n:n+24],
+              calibration='gill',
+              pathlength_type='default',
+              temperature_correction='before_calibration')
+
+# ag_N4: 212, F22, matrix, default
+produce_files(files_ag_N4[n:n+24],
+              calibration='matrix',
+              pathlength_type='default',
+              temperature_correction='before_calibration')
