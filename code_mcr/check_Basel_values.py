@@ -65,7 +65,7 @@ tower = 'E2_3'  # gill, 211
 
 # choose some random files, load the files as one combined data set
 files = sorted([os.path.join(path_data, f) for f in os.listdir(path_data)
-                if tower in f])[10:35]
+                if tower in f])[0:24]
 ds = xr.open_mfdataset(files,
                        coords=['time'],
                        combine='nested',
@@ -215,6 +215,8 @@ fig, ax = plt.subplots(figsize=[12, 12])
 # compare averaged high-frequency and 30-min database data
 ds_30min.T.plot(ax=ax)
 ATA_30min.plot(ax=ax)
+# Add title
+ax.set_title('Temperature', fontsize='16')
 
 
 if verbose:
@@ -237,6 +239,8 @@ try:
     ds_30min.wspd_calib.plot(ax=ax, label='high freq calibrated')
     MSA_30min.plot(ax=ax, label='database')
     ax.legend(fontsize=16)
+    # Add title
+    ax.set_title('Windspeed', fontsize='16')
 
     if verbose:
         print('WINDSPEED')
@@ -262,6 +266,8 @@ try:
     # ds_30min.wspd_calib.plot(ax=ax, label='high freq calibrated')
     AHA_30min.plot(ax=ax, label='database')
     ax.legend(fontsize=16)
+    # Add title
+    ax.set_title('Humidity', fontsize='16')
 
     if verbose:
         print('HUMIDITY')

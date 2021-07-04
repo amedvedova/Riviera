@@ -52,7 +52,7 @@ FREQ = 29.4912e6      # [Hz] Freq of ultrasonic pulse used to get transit count
 savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
-# TODO remove
+# TODO remove!
 # empty the directory
 for file in os.listdir(save_folder):
     os.remove(os.path.join(save_folder, file))
@@ -67,10 +67,7 @@ path_ro = "/home/alve/Desktop/Riviera/MAP_subset/data/ro/rohdaten/fast"
 join = os.path.join
 files_ro_N2 = sorted(glob.glob(join(path_ro, '**/RO_N2_*.raw')))  # 043 E12 m
 files_mn_N4 = sorted(glob.glob(join(path_mn, '**/MN_N4_*.raw')))  # 211 E23 g
-files_mn_N5 = sorted(glob.glob(join(path_mn, '**/MN_N5_*.raw')))  # 213 E24 g
 files_mn_N7 = sorted(glob.glob(join(path_mn, '**/MN_N7_*.raw')))  # 212 E25 m
-files_ag_N2 = sorted(glob.glob(join(path_ag, '**/AG_N2_*.raw')))  # 208 F21 g
-files_ag_N4 = sorted(glob.glob(join(path_ag, '**/AG_N4_*.raw')))  # 160 F22 m
 
 
 # %% Function definitions
@@ -516,40 +513,12 @@ def produce_files(filelist,
 # 3 sonics gill calibrated (211, 213, 208)
 # 3 sonics matrix calibrated (160, 212, 43)
 
-n = 200
+n = 0
 
 # ro_N2: 043, E12, matrix, sanvittore
-produce_files(files_ro_N2[n:n+24],
-              calibration='matrix',
-              pathlength_type='sanvittore',
-              temperature_correction='before_calibration')
+ds = produce_files(files_mn_N7[n:n+50],
+                   calibration='matrix',
+                   pathlength_type='sanvittore',
+                   temperature_correction='before_calibration')
 
-# mn_N4: 211, E23, gill, sanvittore
-produce_files(files_mn_N4[n:n+24],
-              calibration='gill',
-              pathlength_type='sanvittore',
-              temperature_correction='before_calibration')
-
-# mn_N5: 213, E24, gill, sanvittore
-produce_files(files_mn_N5[n:n+24],
-              calibration='gill',
-              pathlength_type='sanvittore',
-              temperature_correction='before_calibration')
-
-# mn_N7: 212, E25, matrix, sanvittore
-produce_files(files_mn_N7[n:n+24],
-              calibration='matrix',
-              pathlength_type='sanvittore',
-              temperature_correction='before_calibration')
-
-# ag_N2: 213, F21, gill, default
-produce_files(files_ag_N2[n:n+24],
-              calibration='gill',
-              pathlength_type='default',
-              temperature_correction='before_calibration')
-
-# ag_N4: 212, F22, matrix, default
-produce_files(files_ag_N4[n:n+24],
-              calibration='matrix',
-              pathlength_type='default',
-              temperature_correction='before_calibration')
+# TODO implement checks of q!
