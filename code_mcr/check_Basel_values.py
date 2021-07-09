@@ -29,10 +29,8 @@ from gill_calibration import get_all_corrections as correct_gill
 
 
 # Indicates whether the uvw values should be calibrated in this script. 
-# Set to matrix/gill true only if the files were NOT calibrated beforehand!
-# TODO uncomment wanted calibration
+# Set to true only if the files were NOT calibrated beforehand!
 calibrate = False
-
 # Print information, plot extra figures
 verbose = True
 
@@ -44,11 +42,9 @@ path_bin = '/home/alve/Desktop/Riviera/MAP_subset/data/database/data/bin/'
 path_data = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
 
-# TODO AHA E12, E26 (humidity)
-
 # Gill sonics: tower+level, calibration, serial number
-# tower = 'E1_2'  # matrix, 043
-tower = 'E2_3'  # gill, 211
+tower = 'E1_2'  # matrix, 043
+# tower = 'E2_3'  # gill, 211
 # tower = 'E2_4'  # gill, 213
 # tower = 'E2_5'  # matrix, 212
 # tower = 'F2_1'  # gill, 208
@@ -61,11 +57,15 @@ tower = 'E2_3'  # gill, 211
 # tower = 'E2_1'  # matrix, 118
 # tower = 'E2_2'  # matrix, 199
 
+# Gill HS sonic: tower+level, calibration
+# tower = 'E2_6'  # matrix
+
+
 # %% load high-resolution and database data
 
 # choose some random files, load the files as one combined data set
 files = sorted([os.path.join(path_data, f) for f in os.listdir(path_data)
-                if tower in f])[0:24]
+                if tower in f])[5:30]
 ds = xr.open_mfdataset(files,
                        coords=['time'],
                        combine='nested',
@@ -82,7 +82,7 @@ if calibrate:
     # get serial number
     serial = ds.attrs['sonic serial number']
     # TODO write a sonic-dependent calibration
-    if 'Gill' in serial:
+    if 'Gill R2' in serial:
         # matrix calibration
         if serial[-3:] in ['043', '212', '160']:
             u_corr, v_corr, w_corr = correct_matrix(u, v, w, serial)
@@ -106,6 +106,13 @@ if calibrate:
         # reassign uvw
         u = u_corr
         v = -1 * v_corr
+        w = w_corr
+    elif 'Gill HS' in serial:
+        # matrix calibration
+        u_corr, v_corr, w_corr = correct_matrix(-1*u, v, w, serial)
+        # reassign uvw
+        u = -1 * u_corr
+        v = v_corr
         w = w_corr
 
 
@@ -213,7 +220,7 @@ ATA_30min = ATA_asc.loc[ds_30min.time.values]
 # Figure + values: compare temperatures
 fig, ax = plt.subplots(figsize=[12, 12])
 # compare averaged high-frequency and 30-min database data
-ds_30min.T.plot(ax=ax)
+ds_30min.T.plot(ax=ax, label='high freq')
 ATA_30min.plot(ax=ax)
 # Add title
 ax.set_title('Temperature', fontsize='16')
@@ -221,8 +228,10 @@ ax.set_title('Temperature', fontsize='16')
 
 if verbose:
     # compare numeric values: useful when values are very close
+    print('TEMPERATURE')
     print(ds_30min.T.values)
     print(ATA_30min.values.squeeze())
+    print('')
 
 # %% MSA: wind speed
 
@@ -271,7 +280,9 @@ try:
 
     if verbose:
         print('HUMIDITY')
+        print('high frequency:')
         print(ds_30min.q.values)
+        print('database:')
         print(AHA_30min.values.squeeze())
         print('')
 except FileNotFoundError:

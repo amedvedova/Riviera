@@ -71,8 +71,7 @@ sonic_latlon = {'A': [46.254722, 9.011667],
 # wrong (same as A) in the metadata report (H taken from the report)
 krypton_SN = {'A': 'KH2O (1299)',
               'C': 'KH2O (1300)',
-              'F': 'KH2O (1370)',
-              'H': 'KH2O (0000)'}
+              'F': 'KH2O (1370)'}
 
 # height of the krypton the mast, info from metadata report
 # only for H it differs from the sonic height
@@ -81,13 +80,21 @@ krypton_height = {'A': 3.56,
                   'F': 23.78,
                   'H': 5.78}
 
-# values needed to convert voltage to humidity for each kryptn
+# values needed to convert voltage to humidity for each krypton
 # taken from edi2000v2.f
 # order: [b0, b1, b2, rkwd, rkww, rlnv0d, rlnv0w, xpk]
-krypton_calibrations = {'A': [0.7582, 0.8636, 0.0044, 0.152,
-                              0.136, 8.111, 7.919, 1.393],
-                        'C': [0.6748, 0.8851, 0.0039, 0.149,
-                              0.135, 8.043, 7.866, 1.438],
+# Clean window: these were used!
+# No "clean window" coeffs for F - these are copied from the scaled ones!
+krypton_calibrations = {'A': [0.1212, 0.9790, 0.0007, 0.152,
+                              0.137, 8.479, 8.301, 1.393],
+                        'C': [0.0875, 0.9841, 0.0005, 0.149,
+                              0.135, 8.456, 8.285, 1.438],
                         'F': [0.6768, 0.8617, 0.0051, 0.152,
-                              0.137, 8.222, 8.054, 1.361],
-                        'H': 'unknown'}
+                              0.137, 8.222, 8.054, 1.361]}
+# # Scaled window calibration coefficients
+# krypton_calibrations = {'A': [0.7582, 0.8636, 0.0044, 0.152,
+#                               0.136, 8.111, 7.919, 1.393],
+#                         'C': [0.6748, 0.8851, 0.0039, 0.149,
+#                               0.135, 8.043, 7.866, 1.438],
+#                         'F': [0.6768, 0.8617, 0.0051, 0.152,
+#                               0.137, 8.222, 8.054, 1.361]}

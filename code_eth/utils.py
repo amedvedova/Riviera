@@ -1,7 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Calculations of temperature and humidity
+##############################################################################
+#
+# This module contains functions to:
+#
+# - parse the filename to get info about location and time
+# - produce metadata: timestamps for the input arrays
+# - load reference data: local temperature and humidity, reference pressure and
+#   temperature in 30 min intervals
+# - calculate (half-)hourly data: temperature, humidity, pressure...
+#
+# - sonic (virtual) temperature, absolute temperature, humidity
+# other utility functions
+# TODO
+#
+##############################################################################
 
 import numpy as np
 import pandas as pd
@@ -25,16 +39,16 @@ def make_namestrings(fname):
     Returns
     -------
     loc : str
-        sonic location + level
+        sonic location (tower, project abbreviation) + level
     date : pd.Timestamp
         beginning of measurement period
-    output_name : TYPE
+    output_name : str
         name of the output file - contains location and date as well
 
     """
     # parse filename for time information
     loc = fname[0]       # sonic identification letter, after ETH convention
-    DoY = fname[1:4]     # day of year
+    DoY = fname[1:4]     # day of year (DoY)
     hh = fname[4:6]      # hour of day
     mm = fname[6:8]      # minutes of hour
 
@@ -49,7 +63,29 @@ def make_namestrings(fname):
     return loc, date, output_name
 
 
-def make_time_arrays(init_time, freq):
+def make_time_arrays(init_time):
+    """
+    Produce a timerange based on the sonic frequency and initial timestamp
+
+    Parameters
+    ----------
+    init_time : timestamp
+        denotes the time at the beginning of the measurement period
+    freq : float
+        frequency of the sonic
+
+    Returns
+    -------
+    timerange_full : DateTimeIndex
+        Index for the entire 1h period, with a timestamp for each measurement
+    timerange_30min : DateTimeIndex
+        Inde for the half-hourly data, i.e. contains only 2 values, denoting
+        the beginning of each 30-min period within one hour. This is used only
+        when reference (low-frequency) data is present in the dataset.
+
+    """
+    # Gill R2 sonic frequency: 75000 points per hour
+    freq = 75000 / 60 / 60    # 20.833 Hz
     # Time array with the sonic frequency for high frequency variables
     timerange_full = pd.date_range(init_time,
                                    freq=str(1/freq)+'S',
@@ -59,95 +95,6 @@ def make_time_arrays(init_time, freq):
                                     freq='1800S',
                                     periods=2)
     return timerange_full, timerange_30min
-
-
-def get_reference_data(path, loc, fname, time_index):
-    '''
-    If available, get reference data, stored in 30 min intervals. There are six
-    variables, 2 entries per hour, in each file: local temperature, local rh,
-    reference pressure and reference temperature: the reference values are
-    measured at the Bosco di Sotta station. Two more columns hold rain and net
-    radiation data which we don't need here.
-
-    Reference data is NOT available for the entire campaign period.
-
-    Parameters
-    ----------
-    path : str
-        path to data
-    loc : str
-        letter denoting the sonic location
-    fname : str
-        filename: full path to the file where high frequency data is stored.
-        The name pattern of reference data corresponds to the name of the
-        reference data.
-    time_index : pd.DateTimeIndex
-        pandas index denoting times when the two 30-min periods are beginning
-
-    Returns
-    -------
-    ref_data : pd.DataFrame
-        reference data: local temperature, relative humidity and pressure, and
-        reference pressure and temperature.
-
-    '''
-
-    # get a reference file corresponding to the high frequency variables
-    file_ref = os.path.join(path, 'ref', loc,
-                            '{}.ref'.format(os.path.splitext(fname)[0]))
-
-    # if the file exists, load it and extract reference data
-    if os.path.exists(file_ref):
-        # load data, name columns
-        # p_ref and t_ref measured only at Bosco di Sotta, used to calculate
-        #   pressure at all other stations, based on the altitude difference
-        ref_data = pd.read_csv(file_ref,
-                               sep='\s+',
-                               usecols=[0, 1, 2, 3],
-                               names=['t', 'rh', 'p_ref', 't_ref'])
-        # set index of reference data to the timestamp they correspond to
-        ref_data.index = time_index.values
-        # add local pressure data
-        ref_data['p'] = get_local_pressure(loc, ref_data.t_ref, ref_data.p_ref)
-        return ref_data
-    # if the corresponding reference file does not exist, return None
-    else:
-        return None
-
-
-def get_hourly_vars(df):
-    '''
-    The original analysis script (edi2000v2.f) works with hourly averages in
-    order to calculate temperature from the speed of sound. This function is
-    used to get hourly averages from half-hourly values.
-
-    Parameters
-    ----------
-    df : pd.Datafrare
-        pandas dataframe with the half-hourly values of temperature, relative
-        humidity and pressure - these measurements are NOT from the sonic, but
-        from other instruments.
-
-    Returns
-    -------
-    t_h, rh_h, p_h, e_h, rho_wv_h : floats
-        hourly average values of temperature, relative humidity, pressure,
-        vapor pressure, water vapor density
-
-    '''
-    # get hourly temperature, relative humidity and pressure by averaging
-    t_h = df.t.mean()
-    rh_h = df.rh.mean()
-    p_h = df.p.mean()
-
-    # Make sure pressure is in Pa, not in hPa
-    if p_h < 6e4:
-        p_h = p_h*100
-
-    # get hourly vapor pressure and density of water vapor from those
-    e_h, rho_wv_h, rho_air_h = get_e_and_rho(t_h, rh_h, p_h)
-
-    return t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h
 
 
 def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min,
@@ -179,7 +126,7 @@ def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min,
         coordinates to be used in the xarray Dataset
 
     """
-    # convert u, v, w from cm/s to m/s
+    # convert u, v, w from cm/s (original units of data) to m/s
     arr[:, [0, 1, 2]] = arr[:, [0, 1, 2]] / 100.0
     # convert speed of sound to virtual temperature (in Kelvin)
     T = get_sonic_temperature(arr[:, 3])
@@ -194,31 +141,32 @@ def prepare_ds_with_ref_data(arr, timerange_full, timerange_30min,
                      T_abs=('time', T_abs),
                      T_30min=('time_30min', ref_data.t),
                      rh_30min=('time_30min', ref_data.rh),
-                     p_30min=('time_30min', ref_data.p * 100))  # convert to Pa
+                     p_30min=('time_30min', ref_data.p * 100))  # hPa to Pa
     coords = dict(time=timerange_full,
                   time_30min=timerange_30min,
                   time_1h=date.to_datetime64())
 
+    # get necessary variables at hourly resolution: needed also for T_abs!
+    t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h = get_hourly_vars(ref_data)
+
+    # add hourly variables which were used to calculate T_abs and q
+    data_vars['e_1h'] = ('time_1h', [e_h])               # vapor pressure [Pa]
+    data_vars['rho_wv_1h'] = ('time_1h', [rho_wv_h])     # Air density [g/m^3]
+    data_vars['rho_air_1h'] = ('time_1h', [rho_air_h])   # Water vapor density [g/m^3]
+
     # if krypton is present, calculate also humidity
-    if (loc in ['A', 'C', 'F']):
+    if arr.shape[1] > 4:
         # from krypton voltage calculate humidity, add it to the data set
         voltage = arr[:, 4]
-        # get necessary variables at hourly resolution
-        t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h = get_hourly_vars(ref_data)
-        # calculate specific humidity
+        # calculate specific humidity after the ETH procedure
         q = get_humidity(loc, voltage, rho_air_h, rho_wv_h)
-        # add raw voltage and calculated humidity q to the data_vars dictionary
-        data_vars['voltage'] = ('time', voltage)
-        data_vars['q'] = ('time', q)
-        # add hourly variables which were used to calculate q
-        data_vars['e_1h'] = ('time_1h', [e_h])               # vapor pressure [Pa] 
-        data_vars['rho_wv_1h'] = ('time_1h', [rho_wv_h])     # Air density [g/m^3]
-        data_vars['rho_air_1h'] = ('time_1h', [rho_air_h])   # Water vapor density [g/m^3]
+        # add the calculated humidity q to the data_vars dictionary
+        data_vars['q_ETH'] = ('time', q)
 
     return data_vars, coords
 
 
-def prepare_ds_no_ref_data(arr, timerange_full, date):
+def prepare_ds_no_ref_data(arr, timerange_full, date, loc):
     """
     prepare dictionaries with all the variables and coordinates needed to make
     a xarray dataset
@@ -252,13 +200,104 @@ def prepare_ds_no_ref_data(arr, timerange_full, date):
                      T=('time', T))
     coords = dict(time=timerange_full,
                   time_1h=date)
+
     return data_vars, coords
 
 
+def get_reference_data(path, loc, fname, time_index):
+    """
+    If available, get reference data, stored in 30 min intervals. There are six
+    variables, 2 entries per hour, in each file: local temperature, local rh,
+    reference pressure and reference temperature. The reference values are
+    measured at the Bosco di Sotta station. Two more columns hold rain and net
+    radiation data which we don't need here.
+
+    Reference data is NOT available for the entire campaign period!
+
+    Parameters
+    ----------
+    path : str
+        path to data
+    loc : str
+        letter denoting the sonic location
+    fname : str
+        filename: full path to the file where high frequency data is stored.
+        The name pattern of reference data corresponds to the name of the
+        reference data.
+    time_index : pd.DateTimeIndex
+        pandas index denoting times when the two 30-min periods are beginning
+
+    Returns
+    -------
+    ref_data : pd.DataFrame
+        reference data: local temperature, relative humidity and pressure, and
+        reference pressure and temperature.
+
+    """
+
+    # get a reference file corresponding to the high frequency variables
+    file_ref = os.path.join(path, 'ref', loc,
+                            '{}.ref'.format(os.path.splitext(fname)[0]))
+
+    # if the file exists, load it and extract reference data
+    if os.path.exists(file_ref):
+        # load data, name columns
+        # p_ref and t_ref measured only at Bosco di Sotta, used to calculate
+        #   pressure at all other stations, based on the altitude difference
+        ref_data = pd.read_csv(file_ref,
+                               sep='\s+',
+                               usecols=[0, 1, 2, 3],
+                               names=['t', 'rh', 'p_ref', 't_ref'])
+        # set index of reference data to the timestamp they correspond to
+        ref_data.index = time_index.values
+        # add local pressure data
+        ref_data['p'] = get_local_pressure(loc, ref_data.t_ref, ref_data.p_ref)
+        return ref_data
+    # if the corresponding reference file does not exist, return None
+    else:
+        return None
+
+
+def get_hourly_vars(df):
+    """
+    The original analysis script (edi2000v2.f) works with hourly averages in
+    order to calculate temperature from the speed of sound. This function is
+    used to get hourly averages from half-hourly values.
+
+    Parameters
+    ----------
+    df : pd.Dataframe
+        pandas dataframe with the half-hourly values of temperature, relative
+        humidity and pressure - these measurements are NOT from the sonic, but
+        from other instruments.
+
+    Returns
+    -------
+    t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h : floats
+        hourly average values of temperature, relative humidity, pressure,
+        vapor pressure, water vapor density, air density
+
+    """
+    # get hourly temperature, relative humidity and pressure by averaging
+    t_h = df.t.mean()
+    rh_h = df.rh.mean()
+    p_h = df.p.mean()
+
+    # Make sure pressure is in Pa, not in hPa
+    if p_h < 6e4:
+        p_h = p_h*100
+
+    # get hourly vapor pressure and density of water vapor from those
+    e_h, rho_wv_h, rho_air_h = get_e_and_rho(t_h, rh_h, p_h)
+
+    return t_h, rh_h, p_h, e_h, rho_wv_h, rho_air_h
+
+
 def get_krypton_calibration(loc, ln_V_mean, rho_hourly):
-    '''
-    # I still don't fully understand why they convert it this way, using Taylor
+    """
+    I still don't fully understand why ETH converted it this way, using Taylor
     expansions around the mean...
+
     Original documentation:
     Using the mean hourly density ("rom"), this function calculates the
     instantaneous density for every possible signal (0 ... 5000mV) of the
@@ -289,7 +328,7 @@ def get_krypton_calibration(loc, ln_V_mean, rho_hourly):
     at most np.log(5000) = 8.517.
     Wet conditions correspond to ln(V) = 0.00 to 6.599
     Dry conditions correspond to ln(V) = 6.60 to 8.517
-    The change between wet/dry occurs at voltage of 735 mV
+    The change between wet/dry thus occurs at voltage of 735 mV
 
     Nomenclature:
     ln_V_mean: log of mean voltage over a given time period - reference voltage
@@ -305,7 +344,11 @@ def get_krypton_calibration(loc, ln_V_mean, rho_hourly):
     Parameters
     ----------
     loc : str
-        location, denoting the position of the krypton
+        location, denoting the position of the krypton, used to get coeffs
+    ln_V_mean : float
+        mean of the logarithm of voltage
+    rho_hourly : float
+        average hourly water vapor density
 
     Returns
     -------
@@ -313,7 +356,7 @@ def get_krypton_calibration(loc, ln_V_mean, rho_hourly):
         "look up table/calibration curve": 5000 different values of rho,
         correspondng to 5000 different possible voltage values.
 
-    '''
+    """
     # get calibration constants for a given kryptons
     # no clue what these are...
     [B0, B1, B2, kw_dry, kw_wet,
@@ -366,7 +409,8 @@ def get_krypton_calibration(loc, ln_V_mean, rho_hourly):
 # %% CALCULATIONS
 
 def get_local_pressure(loc, temp, p0):
-    ''' Calculate pressure at sonic location: pressure measured only at
+    """
+    Calculate pressure at sonic location: pressure measured only at
     Bosco di Sotto tower (location "A1", or sonic "A")
 
     Adapted from the edi2000v2.f script, but written more clearly/explicitely
@@ -386,7 +430,7 @@ def get_local_pressure(loc, temp, p0):
         pressure at the given location, based on the height difference and
         the current pressure and temperature at Bosco di Sotto
 
-    '''
+    """
     # get altitude difference between reference pressure measurement and sonic
     # sonic height plus difference in tower heights
     dz = sonic_height[loc] + height_asl[loc] - height_asl['A']
@@ -407,8 +451,8 @@ def get_local_pressure(loc, temp, p0):
 
 
 def get_e_and_rho(t_hourly, rh_hourly, p_hourly):
-    '''
-    Tis function calculates and returns one hour averages of vapor pressure
+    """
+    This function calculates and returns one hour averages of vapor pressure
     and densities of air and water vapor.
 
     First calculate saturation vapor pressure from mean hourly temperature and
@@ -445,7 +489,7 @@ def get_e_and_rho(t_hourly, rh_hourly, p_hourly):
     rho_air_hourly : float
         Mean hourly density of air. Around 1250 g/m^3 at 10C.
 
-    '''
+    """
     # Make sure temperature is in Kelvin
     if t_hourly < 200:
         t_hourly = t_hourly + 273.16
@@ -511,7 +555,7 @@ def get_abs_temperature(sos, ref_data):
     # first division by 50 because the instrument saves data as 1/50 m/s
 
     frac = 1 + 0.3192*(e_h/p_h)
-    T = (sos * 0.02)**2 / 403 / frac
+    T = (sos * 0.02)**2 / 402.7 / frac
     return T
 
 
@@ -521,7 +565,7 @@ def get_sonic_temperature(sos):
     it does not take into account pressure and humidity changes.
 
     The 0.02 comes from the way how the sonic stores the speed of sound data,
-    i.e. this calculation is based on the eqn. T = c^2 / 403
+    i.e. this calculation is based on the eqn. T = c^2 / 402.7
 
     Parameters
     ----------
@@ -534,12 +578,12 @@ def get_sonic_temperature(sos):
         temperature
 
     """
-    T = (sos * 0.02)**2 / 403
+    T = (sos * 0.02)**2 / 402.7
     return T
 
 
 def get_humidity(loc, voltage, rho_air_hourly, rho_wv_hourly):
-    '''
+    """
     Using the voltage measurement from the krypton, calculates specific
     humidity.
 
@@ -560,7 +604,7 @@ def get_humidity(loc, voltage, rho_air_hourly, rho_wv_hourly):
         High frequency values of specific humidity, same shape as voltage input
         Should not exceed ~0.04 kg/kg
 
-    '''
+    """
     # I think that the original script did it over 30 min periods?
     # calculate logarithm of 1h mean voltage from the krypton
     with np.errstate(invalid='ignore'):
@@ -587,3 +631,48 @@ def get_humidity(loc, voltage, rho_air_hourly, rho_wv_hourly):
     q = r/(1+r)
 
     return q
+
+
+def get_rho_MCR(krypton_coeffs, voltage):
+    """
+    This function closely replicates the "MCR" (Basel) lab procedure for
+    calculating water vapor density from krrypton voltage.
+
+    The MCR procedure differs in one significant fact: there are THREE types of
+    calibration coefficients available, "full" for all conditions, and then
+    "dry/wet" ranges. In the MCR code, the full range coeffs are first used and
+    based on the results, dry OR wet coeffs are chosen.
+    In this case we don't have the "full range" coeffs available, and so both
+    available sets of coefficients are used, and two arrays of water vapor
+    density are returned, one which uses the "dry range" coeffs and the second
+    one the "wet range".
+
+    Parameters
+    ----------
+    krypton_coeffs : list
+        Calibration coefficients taken from the edi2000v2.f code.
+        Order: B0, B1, B2, kw_dry, kw_wet, ln_V0_dry, ln_V0_wet, x
+        B0/1/2 are used for the ETH procedure to calculate humidity, and are
+        not needed here. ln_V0_dry/wet are the logarithms of reference voltage
+        (i.e. V0_dry/wet is approximately 3000), kw_dry/wet are the offsets and
+        x is the pathlength.
+
+    voltage : array
+        voltage of the krypton
+
+    Returns
+    -------
+    rho_dry/wet : array
+        Arrays of the water vapor density [g/m^3], based on the dry/wet
+        calibration coefficients.
+
+    """
+    # unpack the list of coefficients for a given Krypton
+    [B0, B1, B2, kw_dry, kw_wet,
+     ln_V0_dry, ln_V0_wet, x] = krypton_coeffs
+
+    # calculate the water vapor density using the dry/wet ranges
+    rho_dry = (np.log(voltage) - ln_V0_dry) / (-x * kw_dry)
+    rho_wet = (np.log(voltage) - ln_V0_wet) / (-x * kw_wet)
+
+    return rho_dry, rho_wet

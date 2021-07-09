@@ -36,31 +36,26 @@
 
 
 import numpy as np
-import pandas as pd
-import os
 
 
 # Debug settings: print errors etc
 verbose = True
 
-# Directory where calibration files are stored
-dir_calib_files = '/home/alve/Desktop/Riviera/MAP_subset/code_mcr/cal_files'
-
 
 # %%
-
-
-# Gill HS, mn_N8:
-krypton_1094 = {'path_len': 0.999,
-                'V0f': 3583, 'Kwf': -0.135,  # full range
-                'V0l': 3361, 'Kwl': -0.126,  # low range
-                'V0h': 3798, 'Kwh': -0.140}  # high range
 
 # Gill R2, ro_N2:
 krypton_1199 = {'path_len': 1.311,
                 'V0f': 5001, 'Kwf': -0.146,  # full range
                 'V0l': 5221, 'Kwl': -0.152,  # low range
                 'V0h': 4850, 'Kwh': -0.144}  # high range
+
+
+# Gill HS, mn_N8:
+krypton_1094 = {'path_len': 0.999,
+                'V0f': 3538, 'Kwf': -0.135,  # full range
+                'V0l': 3361, 'Kwl': -0.126,  # low range
+                'V0h': 3798, 'Kwh': -0.140}  # high range
 
 
 def calibrate(voltage, serial):
@@ -88,17 +83,16 @@ def calibrate(voltage, serial):
         logV0 = np.log(coeffs['V0f'])
         q_temp = (np.log(voltage) - logV0) / XKw
 
-        # re-calculate q with new coeffs based on the "temporary" values
+        if verbose:
+            print(np.mean(q_temp))
+        # determine new coeffs based on the "temporary" values
         if np.mean(q_temp) > 9:
             XKw = coeffs['path_len'] * coeffs['Kwh']
             logV0 = np.log(coeffs['V0h'])
         else:
             XKw = coeffs['path_len'] * coeffs['Kwl']
             logV0 = np.log(coeffs['V0l'])
+        # re-calculate q with these coefficients
         q = (np.log(voltage) - logV0) / XKw
 
     return q
-
-
-
-

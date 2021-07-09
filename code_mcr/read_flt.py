@@ -81,6 +81,7 @@ for filename in files_all:
 
     # # Add general metadata
     ds.attrs['frequency [Hz]'] = freq
+    ds.attrs['info'] = 'No post-processing necessary for files from this location.'
 
     # # sonic metadata
     ds.attrs['sonic tower and level'] = sonic_location[loc]

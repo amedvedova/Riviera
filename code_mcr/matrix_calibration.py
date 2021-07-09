@@ -30,8 +30,12 @@ def get_calibration_values(serial):
         serno = 'HS46'
 
     # get paths to calibration files
-    p_file = os.path.join(dir_calib_files, 'p_{}.004'.format(serno))
-    n_file = os.path.join(dir_calib_files, 'n_{}.004'.format(serno))
+    if 'Gill HS' in serial:
+        p_file = os.path.join(dir_calib_files, 'xp_{}.004'.format(serno))
+        n_file = os.path.join(dir_calib_files, 'xn_{}.004'.format(serno))
+    else:
+        p_file = os.path.join(dir_calib_files, 'p_{}.004'.format(serno))
+        n_file = os.path.join(dir_calib_files, 'n_{}.004'.format(serno))
 
     # column names
     names = ['auu', 'auv', 'auw', 'au0', 'avu', 'avv',

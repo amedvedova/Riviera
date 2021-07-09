@@ -52,11 +52,6 @@ FREQ = 29.4912e6      # [Hz] Freq of ultrasonic pulse used to get transit count
 savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
-# TODO remove
-# empty the directory
-for file in os.listdir(save_folder):
-    os.remove(os.path.join(save_folder, file))
-
 # paths to data from the MCR sonics
 path_ag = "/home/alve/Desktop/Riviera/MAP_subset/data/ag/rohdaten/fast"
 path_mn = "/home/alve/Desktop/Riviera/MAP_subset/data/mn/rohdaten/fast"
@@ -516,40 +511,38 @@ def produce_files(filelist,
 # 3 sonics gill calibrated (211, 213, 208)
 # 3 sonics matrix calibrated (160, 212, 43)
 
-n = 200
-
 # ro_N2: 043, E12, matrix, sanvittore
-produce_files(files_ro_N2[n:n+24],
+produce_files(files_ro_N2,
               calibration='matrix',
               pathlength_type='sanvittore',
               temperature_correction='before_calibration')
 
 # mn_N4: 211, E23, gill, sanvittore
-produce_files(files_mn_N4[n:n+24],
+produce_files(files_mn_N4,
               calibration='gill',
               pathlength_type='sanvittore',
               temperature_correction='before_calibration')
 
 # mn_N5: 213, E24, gill, sanvittore
-produce_files(files_mn_N5[n:n+24],
+produce_files(files_mn_N5,
               calibration='gill',
               pathlength_type='sanvittore',
               temperature_correction='before_calibration')
 
 # mn_N7: 212, E25, matrix, sanvittore
-produce_files(files_mn_N7[n:n+24],
+produce_files(files_mn_N7,
               calibration='matrix',
               pathlength_type='sanvittore',
               temperature_correction='before_calibration')
 
 # ag_N2: 213, F21, gill, default
-produce_files(files_ag_N2[n:n+24],
+produce_files(files_ag_N2,
               calibration='gill',
               pathlength_type='default',
               temperature_correction='before_calibration')
 
 # ag_N4: 212, F22, matrix, default
-produce_files(files_ag_N4[n:n+24],
+produce_files(files_ag_N4,
               calibration='matrix',
               pathlength_type='default',
               temperature_correction='before_calibration')

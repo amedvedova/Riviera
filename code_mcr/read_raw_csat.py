@@ -55,8 +55,6 @@ freq = 20   # [Hz]
 # concatenate the two lists
 f_raw_all = files_mn_N1 + files_mn_N3
 
-f_raw_all = files_mn_N1[:50] + files_mn_N3[:50]
-
 
 # %% Function definitions
 
