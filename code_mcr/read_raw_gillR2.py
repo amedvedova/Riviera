@@ -576,37 +576,37 @@ def produce_files(filelist,
 # 3 sonics matrix calibrated (160, 212, 043)
 
 # ro_N2: 043, E12, matrix, sanvittore
-produce_files(files_ro_N2[2350:-150],
+produce_files(files_ro_N2,
               calibration='matrix',
               pathlength_type='sanvittore',
               temperature_correction='before_calibration')
 
-# # mn_N4: 211, E23, gill, sanvittore
-# produce_files(files_mn_N4,
-#               calibration='gill',
-#               pathlength_type='sanvittore',
-#               temperature_correction='before_calibration')
+# mn_N4: 211, E23, gill, sanvittore
+produce_files(files_mn_N4,
+              calibration='gill',
+              pathlength_type='sanvittore',
+              temperature_correction='before_calibration')
 
-# # mn_N5: 213, E24, gill, sanvittore
-# produce_files(files_mn_N5,
-#               calibration='gill',
-#               pathlength_type='sanvittore',
-#               temperature_correction='before_calibration')
+# mn_N5: 213, E24, gill, sanvittore
+produce_files(files_mn_N5,
+              calibration='gill',
+              pathlength_type='sanvittore',
+              temperature_correction='before_calibration')
 
-# # mn_N7: 212, E25, matrix, sanvittore
-# produce_files(files_mn_N7,
-#               calibration='matrix',
-#               pathlength_type='sanvittore',
-#               temperature_correction='before_calibration')
+# mn_N7: 212, E25, matrix, sanvittore
+produce_files(files_mn_N7,
+              calibration='matrix',
+              pathlength_type='sanvittore',
+              temperature_correction='before_calibration')
 
-# # ag_N2: 208, F21, gill, default
-# produce_files(files_ag_N2,
-#               calibration='gill',
-#               pathlength_type='default',
-#               temperature_correction='before_calibration')
+# ag_N2: 208, F21, gill, default
+produce_files(files_ag_N2,
+              calibration='gill',
+              pathlength_type='default',
+              temperature_correction='before_calibration')
 
-# # ag_N4: 160, F22, matrix, default
-# produce_files(files_ag_N4,
-#               calibration='matrix',
-#               pathlength_type='default',
-#               temperature_correction='before_calibration')
+# ag_N4: 160, F22, matrix, default
+produce_files(files_ag_N4,
+              calibration='matrix',
+              pathlength_type='default',
+              temperature_correction='before_calibration')
