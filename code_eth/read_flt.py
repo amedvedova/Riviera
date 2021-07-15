@@ -17,6 +17,8 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl, krypton_SN, krypton_height
 
 
+verbose = True
+
 # flag to save files
 savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/eth_sonics_processed/'
@@ -37,6 +39,10 @@ for filename in files_all:
 
     # get location (sonic letter), initial time of file, name for saving output
     loc, date, output_name = make_namestrings(fname)
+
+    # For debugging and seeing conversion progress
+    if verbose:
+        print(date, filename)
 
     # make a range of time values: use fixed time periods
     timerange_full = pd.date_range(date, freq=str(1/freq)+'S', periods=18000)

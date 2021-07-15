@@ -43,9 +43,9 @@ tower = 'A1_1'  # A, krypton
 # %% load high-resolution and database data
 
 # load the high resolution files as one combined data set
-n = 75
+n = 400
 files = sorted([os.path.join(path_data, f) for f in os.listdir(path_data)
-                if tower in f])[n:n+25]
+                if tower in f])[n:n+12]
 ds = xr.open_mfdataset(files,
                        coords=['time'],
                        combine='nested',

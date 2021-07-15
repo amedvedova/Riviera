@@ -39,6 +39,8 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
 
 
+verbose = True
+
 # flag: use the Uni Basel matrix calibration for the CSAT3 sonics
 calibrate = True
 
@@ -294,6 +296,10 @@ for f_raw in f_raw_all:
     with open(f_raw, 'rb') as file:
         # get location and time of file
         loc, date, date_30min_floor = info_from_filename(f_raw)
+
+        # For debugging and seeing conversion progress
+        if verbose:
+            print(date, f_raw)
         # get filesize in bytes
         size = os.path.getsize(f_raw)
         # get count of measurements: (size/10)-1 since each measurement is

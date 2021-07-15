@@ -71,7 +71,8 @@ sonic_latlon = {'A': [46.254722, 9.011667],
 # wrong (same as A) in the metadata report (H taken from the report)
 krypton_SN = {'A': 'KH2O (1299)',
               'C': 'KH2O (1300)',
-              'F': 'KH2O (1370)'}
+              'F': 'KH2O (1370)',
+              'H': 'KH2O (0000)'}
 
 # height of the krypton the mast, info from metadata report
 # only for H it differs from the sonic height
@@ -90,7 +91,8 @@ krypton_calibrations = {'A': [0.1212, 0.9790, 0.0007, 0.152,
                         'C': [0.0875, 0.9841, 0.0005, 0.149,
                               0.135, 8.456, 8.285, 1.438],
                         'F': [0.6768, 0.8617, 0.0051, 0.152,
-                              0.137, 8.222, 8.054, 1.361]}
+                              0.137, 8.222, 8.054, 1.361],
+                        'H': 'unknown'}
 # # Scaled window calibration coefficients
 # krypton_calibrations = {'A': [0.7582, 0.8636, 0.0044, 0.152,
 #                               0.136, 8.111, 7.919, 1.393],

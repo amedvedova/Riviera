@@ -63,7 +63,7 @@ tower = 'E1_2'  # matrix, 043, krypton
 # %% load high-resolution and database data
 
 # choose some random files, load the files as one combined data set
-n = 300
+n = 500
 files = sorted([os.path.join(path_data, f) for f in os.listdir(path_data)
                 if tower in f])[n:n+25]
 ds = xr.open_mfdataset(files,

@@ -496,6 +496,11 @@ def produce_files(filelist,
         with open(f_raw, 'rb') as file:
             # get location and time of file
             loc, date, date_30min_floor = info_from_filename(f_raw)
+
+            # For debugging and seeing conversion progress
+            if verbose:
+                print(date, f_raw)
+
             # get number of analog inputs: 1 at RO_N2, 0 otherwise
             if loc == 'E1_2':
                 ai = 1

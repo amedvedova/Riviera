@@ -26,6 +26,8 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
 
 
+verbose = True
+
 # flag: apply the Uni Basel matrix calibration to the Metek sonic raw data?
 calibrate = True
 
@@ -226,9 +228,12 @@ def info_from_filename(file):
 # loop through list of files
 for f_raw in f_raw_all:
     with open(f_raw, encoding='ascii') as file:
-        print(f_raw)
         # get location and time of file from the filename
         loc, date, date_30min_floor = info_from_filename(f_raw)
+
+        # For debugging and seeing conversion progress
+        if verbose:
+            print(date, f_raw)
 
         # read raw ascii from the file - if there are faulty bits, skip
         try:
