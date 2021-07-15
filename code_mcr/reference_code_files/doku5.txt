@@ -1,0 +1,194 @@
+LABVIEW SONIC DATA AQUISITION
+DOCUMENTATION VERSION 1.4b
+
+Andreas Christen
+Institute of Meteorology, Climatology and Remote Sensing, University of Basel
+andreas.christen@unibas.ch
+
+1. PURPOSE
+2. FILE FORMAT
+3. LOGFILES
+4. INITIALISATION
+5. OPERATION
+6. USE OF ANALOG INPUTS
+7. PREFERENCES
+8. ERROR MESSAGES
+APPENDIX A Error Messages
+APPENDIX B File Formats
+
+1. PURPOSE
+Time-synchronous data aquisition of up to six sonics of different types over com-ports 1,2,5,6,7,8. writes binary rawdata files. Supported sonic-models:
+
+(a) Gill HS
+(b) Gill R2 im Transit Count Mode (Mode 3 must be hardware configured)
+(c) Gill Enhanced
+(d) Campbell CSAT3
+(e) Metek USA-1
+
+2. FILE FORMAT
+Data is written in unchanged binary transmission format (same data which is coming into the com-port buffers from the instruments). For METEK USA-1 instead of ASCII-Data a smaller integer-file format can be written to the files (see "preferences"). Per instrument and time interval a binary raw-file is written without header unsing the following file-naming-convention:
+
+e.g.: TS_L1_1999_174_103127.raw
+      11_22_3333_444_556677.raw
+
+11   = Station-ID as defined in the setup.
+22   = Sensor-ID as defined in the setup.
+3333 = Year of file start
+444  = DOY of file start
+55   = Hour of file start
+66   = Minute of fiel start
+77   = Second of file start
+
+normally the files starts and ends with whole data-records. Only at beginning (first file) and if aquisition errors are occuring, the program cannot cut the files properly.
+
+before writing to file, the data is tested. for sonics (a)-(c) and (e) the program looks for id-bytes. CSAT-records (d) are tested by watching the counter. if an aquisition error occurs the program tries to refind the beginning of a record. during this operation no data is lost. error codes will be written in the logfile.
+
+3. LOGFILES
+for every time interval one ascii-text-logfile is written. this logfile (".log") contais all data describesd in the setup and information about the station, the setup data and errors during aquisition. 
+
+file naming convention for logfiles: 
+
+e.g.: TS_1999_174_103127.log
+      11_3333_444_556677.raw
+
+4. INITIALISATION
+
+To allow a communication, the instruments must be set to the following baud-rates and configurations. The labview program does not set the baud rates.
+
+Gill HS        : 19200 baud
+Gill R2        :  4800 baud and manually to Mode 3 (Jumpers)
+Gill Enhanced  :  4800 baud
+Campbell CSAT3 :  9600 baud
+METEK USA-1    : 19200 baud
+
+5. OPERATION
+
+preferences and setup of instrumentation is done in the setup-window. the setup window is opened by pressing the "setup"-button in the main window. in the setup window for every com port the type of the sensor can be set by the menu. the "sensor id" MUST BE different and 2 characters long. specify a "station id" for file names (2 characters). azimuth is used to align different sonics in the preview-graph (original data remains unchanged). over the input field "File length (sec)" in the setup window the length (duration) of a single file for all sensors is set. all other fileds in the setup window are written to the logfiles. to confim the setup, press "OK". you can save a configuration into a configuration file ("save setup") or load a configuration from a file "load setup".
+
+to start the data aquisition process, press "start" in the main screen. then all instruments will be configured, and after 2-10 seconds the data aquisition process will begin. it's usual that during the first 10-20 seconds some errors will occur (because of the sync).
+
+6. USE OF ANALOG INPUTS
+Gill HS, Gill R2 and METEK USA-1 support analog inputs. for gill hs and metek just set the boxes under "analog input" in the setup window. Numbering of METEK: a4=1, a5=2, a6=3, a7=4. USA-1 and Gill HS will be automatically configured for your analog input-setup. In this version an automatic configuration for gill r2 is not possible. set the ai's in the setup window AND configure the instrument, using rcom or other software.
+
+7. PREFERENCES
+
+> Write Interval
+You can control the write-interval in the setup-window in the field "write intervall (sec)". this describes the time interval the data is written from memory into the data file. best results were made with 3 sec. with smaller intervalls more time is needed for the writing processes, longer intervalls could make problems with the performance (more memory, larger writing blocks) and slow down unser interface (update is done in the same interval).
+
+> Calibration
+Gill HS runs in calibrated or uncalibrated mode. If you want to collect data of a hs in uncalibrated mode, set the check-box "ucal" in the setup-window in the corrresponding line. the program sends the "CAL/UNCAL" command to the hs.
+
+> File format
+Instead of writing large ASCII-iles, METEK USA-1 data can be written to disk in an integer-file format of the convention described in appendix A. This ist set by the check box "int" in the setup window.
+
+8. ERROR MESSAGES
+if an aquisition error occurs, the "error"-boxes on the right of each COM-line on the main-interface will turn into red. detailled error messages will be written directly into the ascii-logfile under section "Errors and Messages".
+
+To avoid errors on slower machines:
+> remove network connections.
+> turn off / slow down online data and/or graph display.
+> do not run other programs on the pc during data aquisition.
+ 
+APPENDIX A Error Formats
+
+Example
+S3:2456
+12:3333
+
+1=Error Type
+2=Sensor Number
+3=Record Number
+
+1) Error Type
+   I = *ID-bytes error: ID-bytes not at beginning of record (offset in status) or no ID-bytes found.
+   S = *Counter/Counterposition error (CSAT3 only): Counter-byte not at correct position or bytes/records missing.
+   O = Counter remains "63" (CSAT3 only): Reasons: Startup, or during operation an obstacle between sensors.
+
+   *auto correction 
+
+2) Sensor Number (1-6)
+   Com 1 = 1
+   Com 2 = 2
+   Com 5 = 3
+   Com 6 = 4
+   Com 7 = 5
+   Com 8 = 6
+
+APPENDIX B File Formats
+
+> CSAT FORMAT 
+  Record Length: 10 bytes
+  Format: CSAT-specific.
+
+  (1 character means 1 bit) see csat manual
+  11111111 11111111 22222222 2222222 3333333 33333333 44444444 44444444 88999999 55556677
+  1 = x-component
+  2 = y-component
+  3 = z-component
+  4 = c
+  5 = diagnostic flags
+  6 = x-range
+  7 = y-range
+  8 = z-range
+  9 = counter
+
+> GILL HS FORMAT
+  Record Length: 13+( 2* no of analog inputs)
+  Format: Gill HS-specific.
+
+  (1 character means 1 byte, except [ ] and n)
+  11 2 3 44 55 66 [ss] 77 n[aa] 8
+  1 = ID-Byte hex 2 * "BA"
+  2 = status adresse (=counter 1-10)
+  3 = status data (inklinometer...)
+  4 = wind x
+  5 = wind y
+  6 = wind z
+  s = speed of sound
+  7 = absolut temp
+  n[aa] = n Analog Inputs (per analog input 2 bytes)
+  8 = Checksum
+
+> GILL R2 FORMAT
+  Mode 3 - Transit Counts 
+  Record Length: 18+( 2* no of analog inputs)
+  Format: Gill R2-specific.
+
+  (1 zeichen entspricht 1 byte, except []):
+  1122334455667788[aa]99
+ 
+  1 = start of record HEX "8181" = -32383
+  2 = record number (Counter)
+  3 = transit count t-b axis 1
+  4 = transit count b-t axis 1
+  5 = transit count t-b axis 2
+  6 = transit Count b-t axis 2
+  7 = transit Count t-b axis 3
+  8 = transit Count b-t axis 3
+  a = analog inputs
+  9 = end of record HEX "8282" = -32126
+
+> METEK USA-1 FORMAT
+
+  (a) ASCII
+  Record Length: 43 bytes without analog inputs
+                 86 bytes with 1-4 analog inputs
+                 (including CR/LF)
+  Format: ASCII
+
+  (b) INTEGER
+  Record Length: 8+(2* no of analog inputs) bytes
+  Format: ASCII
+  11223344[aa]
+
+  1 = wind x [100*m/s]
+  2 = wind y [100*m/s]
+  3 = wind z [100*m/s]
+  4 = virtual acoustic temperature [100*°C]
+  a = analog imputs [0-10V scaled to 32768]. means 0V=0, 5V=16384, 10V=32767
+
+  byte order: msb-lsb signed.
+  sign= wrapps around at 0 to 32768 -> -32768 to -1
+
+
+

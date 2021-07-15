@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+###############################################################################
+#
 # Read in .raw files, add metadata, save as .nc files with metadata
 # Usable only for Uni Basel Gill R2 sonics: locations mn (level 3, 4 5),
 # ro (level 2), ag (level 1, 2)
-# data from other Basel sonics is stored differently.
+# Data from other Basel sonics is stored and processed differently.
 #
 # This data requires calibration!
 #
@@ -25,6 +27,8 @@
 # 8 = transit Count b-t axis 3 msb/lsb: values -10000 - 15000
 # [a] = analog inputs msb/lsb
 # 9 = end of record HEX "8282" = -32126
+#
+###############################################################################
 
 import numpy as np
 import pandas as pd
@@ -38,19 +42,24 @@ from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl, gill_pathlengths
 from gill_calibration import get_all_corrections as correct_gill
 from matrix_calibration import get_all_corrections as correct_matrix
-from krypton_calibration import calibrate as get_humidity
+from krypton_calibration import calibrate_decide as get_rho_decide
+from krypton_calibration import calibrate_high as get_rho_high
 
 
 verbose = True
 
 # %%
-# constants
-FREQ = 29.4912e6      # [Hz] Freq of ultrasonic pulse used to get transit count
 
+# constants
+FREQ = 29.4912e6      # [Hz] Ultrasonic pulse freq, used to get transit count
 
 # flag to save files, folder to which files will be saved
 savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
+
+# choose calibration for the krypton
+# q_setting = 'decide'
+q_setting = 'high'
 
 # paths to data from the MCR sonics
 path_ag = "/home/alve/Desktop/Riviera/MAP_subset/data/ag/rohdaten/fast"
@@ -169,15 +178,16 @@ def tc_from_corrupt_file(f_raw, raw_bytes, bytes_per_row, count):
         return None
 
     # Remove first column (counter) and last column (check bytes)
-    # we'll be left with 6/7 columns
+    # we'll be left with 6 or 7 columns
     tc = tc[:, 1:-1]
 
     return tc
 
 
-def uvwtq_from_tc(tc, loc, calibration='matrix',
+def uvwtq_from_tc(tc, loc,
+                  calibration='matrix',
                   pathlength_type='sanvittore',
-                  temperature_correction=None):
+                  temperature_correction='before_calibration'):
     """
     Function to calculate the wind speed components and temperature from the
     transit counts.
@@ -214,6 +224,18 @@ def uvwtq_from_tc(tc, loc, calibration='matrix',
         (humidity is not processed due to the lack of documentation)
     loc : str
         location of the sonic, used to extract its serial number
+    calibration : str, optional
+        Type of calibration to be applied: matrix / gill / False. If False, no
+        calibration is applied. The default is 'matrix'.
+    pathlength_type : str, optional
+        Type of sonic path length to be used for wind speed and temperature
+        calculations, either "default" of "sanvittore".
+        The default is 'sanvittore'.
+    temperature_correction : str, optional
+        Indicates whether the crosswind correction should be applied.
+        Options: None (no correction), before_calibration (uses uncalibrated
+        wind speed for correction), after_calibration (uses calibrated wind
+        speed for correction). The default is 'before_calibration'.
 
     Returns
     -------
@@ -259,7 +281,7 @@ def uvwtq_from_tc(tc, loc, calibration='matrix',
     elif calibration == 'gill':
         # calibrate uvw with manufacturer files: needs only R2 number
         u_corr, v_corr, w_corr = correct_gill(u, v, w, serial[-4:])
-    else:
+    elif calibration is False:
         # apply no corrections, use raw values
         u_corr = u
         v_corr = v
@@ -297,7 +319,10 @@ def uvwtq_from_tc(tc, loc, calibration='matrix',
     # get humidity if available, NaNs if not
     if tc.shape[1] == 7:
         voltage = tc[:, 6]
-        q = get_humidity(voltage, serial)
+        if q_setting == 'decide':
+            q = get_rho_decide(voltage, serial)
+        elif q_setting == 'high':
+            q = get_rho_high(voltage, serial)
     else:
         q = np.zeros_like(tc[:, 0])
         q.fill(np.nan)
@@ -370,7 +395,13 @@ def ds_from_uvwtq(uvwt_full, date, date_rounded):
     # add humidity if present
     if uvwt.shape[1] == 5:
         ds = ds.assign({'q': ('time', uvwt[:, 4])})
-        ds.q.attrs = {'units': 'g/m^3'}
+        ds.q.attrs = {'units': 'g/m^3',
+                      'info': 'water vapor density',
+                      'calibration': q_setting}
+
+    # Add info how much files were padded in the beginning/end
+    ds.attrs['padded_front'] = missing_front
+    ds.attrs['padded_end'] = missing_end
 
     return ds
 
@@ -432,7 +463,35 @@ def produce_files(filelist,
                   calibration='matrix',
                   pathlength_type='sanvittore',
                   temperature_correction='before_calibration'):
-    # TODO documentation
+    """
+    Production step: each raw file from the filelist is processed, metadata is
+    added and the files are saved.
+    More information about optional arguments in uvwtq_from_tc function.
+
+    Parameters
+    ----------
+    filelist : list
+        list of all Gill R2 files to be ananlyzed
+    calibration : str, optional
+        Type of calibration to be applied: matrix / gill / False. If False, no
+        calibration is applied. The default is 'matrix'.
+    pathlength_type : str, optional
+        Type of sonic path length to be used for wind speed and temperature
+        calculations, either "default" of "sanvittore".
+        The default is 'sanvittore'.
+    temperature_correction : str, optional
+        Indicates whether the crosswind correction should be applied.
+        Options: None (no correction), before_calibration (uses uncalibrated
+        wind speed for correction), after_calibration (uses calibrated wind
+        speed for correction). The default is 'before_calibration'.
+
+    Returns
+    -------
+    ds : xr.Dataset
+        complete output datasets with all metadata and attributes
+
+    """
+
     for f_raw in filelist:
         with open(f_raw, 'rb') as file:
             # get location and time of file
@@ -494,6 +553,11 @@ def produce_files(filelist,
             # add information about whether the original file was corrupt
             ds.attrs['info'] = corrupt_flag
 
+            # add info about data procesing/calibration settings
+            ds.attrs['calibration applied'] = calibration
+            ds.attrs['pathlegths'] = pathlength_type
+            ds.attrs['temperature correction'] = temperature_correction
+
             # save data
             if savefiles:
                 # produce output name based on time and location
@@ -509,40 +573,40 @@ def produce_files(filelist,
 # All E-towers use San Vittore pathlengths, F-tower uses default
 # All files: apply cross-wind temperature correction before wind calibration
 # 3 sonics gill calibrated (211, 213, 208)
-# 3 sonics matrix calibrated (160, 212, 43)
+# 3 sonics matrix calibrated (160, 212, 043)
 
 # ro_N2: 043, E12, matrix, sanvittore
-produce_files(files_ro_N2,
+produce_files(files_ro_N2[2350:-150],
               calibration='matrix',
               pathlength_type='sanvittore',
               temperature_correction='before_calibration')
 
-# mn_N4: 211, E23, gill, sanvittore
-produce_files(files_mn_N4,
-              calibration='gill',
-              pathlength_type='sanvittore',
-              temperature_correction='before_calibration')
+# # mn_N4: 211, E23, gill, sanvittore
+# produce_files(files_mn_N4,
+#               calibration='gill',
+#               pathlength_type='sanvittore',
+#               temperature_correction='before_calibration')
 
-# mn_N5: 213, E24, gill, sanvittore
-produce_files(files_mn_N5,
-              calibration='gill',
-              pathlength_type='sanvittore',
-              temperature_correction='before_calibration')
+# # mn_N5: 213, E24, gill, sanvittore
+# produce_files(files_mn_N5,
+#               calibration='gill',
+#               pathlength_type='sanvittore',
+#               temperature_correction='before_calibration')
 
-# mn_N7: 212, E25, matrix, sanvittore
-produce_files(files_mn_N7,
-              calibration='matrix',
-              pathlength_type='sanvittore',
-              temperature_correction='before_calibration')
+# # mn_N7: 212, E25, matrix, sanvittore
+# produce_files(files_mn_N7,
+#               calibration='matrix',
+#               pathlength_type='sanvittore',
+#               temperature_correction='before_calibration')
 
-# ag_N2: 213, F21, gill, default
-produce_files(files_ag_N2,
-              calibration='gill',
-              pathlength_type='default',
-              temperature_correction='before_calibration')
+# # ag_N2: 208, F21, gill, default
+# produce_files(files_ag_N2,
+#               calibration='gill',
+#               pathlength_type='default',
+#               temperature_correction='before_calibration')
 
-# ag_N4: 212, F22, matrix, default
-produce_files(files_ag_N4,
-              calibration='matrix',
-              pathlength_type='default',
-              temperature_correction='before_calibration')
+# # ag_N4: 160, F22, matrix, default
+# produce_files(files_ag_N4,
+#               calibration='matrix',
+#               pathlength_type='default',
+#               temperature_correction='before_calibration')

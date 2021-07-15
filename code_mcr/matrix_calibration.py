@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# TODO
+###############################################################################
+#
+# Calibration of Basel (MCR lab) sonics, based on the values obtained in the
+# wind tunnel ("wk99"), applied to 3 Gill R2 sonics, both CSAT3 sonics,
+# Metek-USA and Gill HS sonics.
+#
+###############################################################################
 
 import numpy as np
 import pandas as pd
@@ -17,8 +23,23 @@ dir_calib_files = '/home/alve/Desktop/Riviera/MAP_subset/code_mcr/cal_files'
 
 # %%
 
-
 def get_calibration_values(serial):
+    """
+    Retrieves two calibration files (for positive/negative vertical wind
+    speeds) based on the name and serial number of the sonics. These files
+    exist for all but three of the Gill R2 sonics
+
+    Parameters
+    ----------
+    serial : str
+        name + serial number of the sonic
+
+    Returns
+    -------
+    p_calib, n_calib : array
+        calibration values for positive/negative wind speeds
+
+    """
     # get a serial-number-based string to load matrix calibration files
     if 'Gill R2' in serial:
         serno = 'S{}'.format(serial[-4:].lstrip('0'))
@@ -119,6 +140,28 @@ def get_angle(u, v, gillR2=False):
 
 
 def calibrate(u, v, w, p_calib, n_calib, angle):
+    """
+    Applies calibration to each wind component, based on the angle from which
+    the wind is coming and based on whether the vertical wind speed in positive
+    or negative, i.e. the calibration values are angle-dependent.
+
+    Parameters
+    ----------
+    u, v, w : array
+        uncalibrated wind components
+    p_calib, n_calib : array
+        arrays with the calibration values
+    angle : array
+        angle of the wind at each time step, determining which calibration will
+        be chosen
+
+    Returns
+    -------
+    u_corr, v_corr, w_corr : array
+        calibrated wind components
+
+    """
+
     # Get indices where w is positive/negative
     w_pos = w > 0
     w_neg = w < 0
@@ -132,6 +175,7 @@ def calibrate(u, v, w, p_calib, n_calib, angle):
     p = p_calib.loc[list(angle)].values
     n = n_calib.loc[list(angle)].values
 
+    # Matrix calibration: each component affects each
     # Get corrected u/v/w values where w > 0
     u_corr[w_pos] = u[w_pos] * p[w_pos, 0] + v[w_pos] * p[w_pos, 1] + \
                     w[w_pos] * p[w_pos, 2] + p[w_pos, 3]
@@ -151,6 +195,25 @@ def calibrate(u, v, w, p_calib, n_calib, angle):
 
 
 def get_all_corrections(u, v, w, serial):
+    """
+    This function retrieves the matrix calibration files based on the name and
+    the serial number of the sonic and then applies these calibrations to the
+    raw wind speed components.
+
+    Parameters
+    ----------
+    u, v, w : array
+        uncalibrated wind components
+    serial : str
+        full name and serial number of the given sonic
+
+    Returns
+    -------
+    u_corr, v_corr, w_corr : array
+        calibrated wind components
+
+    """
+
     # load calibration tables
     p_calib, n_calib = get_calibration_values(serial)
 

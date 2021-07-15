@@ -163,6 +163,10 @@ function r2cal,tc,cson,tpfak,qq=qq,mat99=mat99,gill=gill,pure=pure,kelvin=kelvin
     skawe(3,*)=t1v & skawe(4,*)=t2v & skawe(5,*)=t3v & skawe(6,*)=tvmean
   endelse
 
+  cu = 0 & cv = 0 & cw = 0 & vu = 0 & vv = 0 & vw = 0
+  um = 0 & vm = 0 & vw = 0 & t1 = 0 & t2 = 0 & t3 = 0
+  t1v = 0 & t2v = 0 & t3v = 0 & tvmean=0B
+
   return,skawe
 
 end

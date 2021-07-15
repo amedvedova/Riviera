@@ -23,11 +23,11 @@ dir_calib_files = '/home/alve/Desktop/Riviera/MAP_subset/code_mcr/cal_files'
 def get_angle(u, v):
     """
     Calculate the UNCALIBRATED wind direction. Note that the sonic coordinate
-    system is LEFT-HANDED and offset by 30 degrees.
+    system is LEFT-HANDED and OFFSET by 30 degrees.
 
-    Usually, when dealing with angles, the angle increases conter-clockwise and
-    0 degrees = East. However, we want meteorological coordinates: angle
-    increases clockwis and 0 degrees = North.
+    Usually, when dealing with angles, the angle increases counter-clockwise
+    and 0 degrees = East. However, we want meteorological coordinates: angle
+    increases clockwise and 0 degrees = North.
 
     From the reference manual:
     The formula for the direction calculation is arctan(v/u) - 30 degrees.
@@ -61,7 +61,7 @@ def get_angle(u, v):
 
 def get_calibration_values(serial):
     """
-    Load calibration files for the sonic based on its serial number
+    Load manufacturer calibration files for the sonic based on its serial no.
 
     Parameters
     ----------
@@ -153,6 +153,27 @@ def get_uv_corrections(u, v, dir_calib, mag_calib, angle):
 
 
 def get_w_corrections(w, w_up_calib, w_down_calib, angle):
+    """
+    This function changes the magnitude of the measured w wind component, based
+    on the angle of the wind.
+
+    Parameters
+    ----------
+    w : array
+        vertical wind speed
+    w_up_calib, w_down_calib : array (360 values)
+        calibration values for positive/negative vertical wind speeds, angle
+        dependent
+    angle : array
+        angle of wind, determining which calbration values will be applied
+
+    Returns
+    -------
+    w_corr : array
+        corrected vertical wind speed
+
+    """
+
     # Get calibration values for positive/negative w-values
     w_pos = w_up_calib[angle] / 65536
     w_neg = w_down_calib[angle] / 65536
@@ -165,6 +186,25 @@ def get_w_corrections(w, w_up_calib, w_down_calib, angle):
 
 
 def get_all_corrections(u, v, w, serial):
+    """
+    Applies calibration to each wind component, based on the angle from which
+    the wind is coming and based on whether the vertical wind speed in positive
+    or negative, i.e. the calibration values are angle-dependent.
+
+    Parameters
+    ----------
+    u, v, w : array
+        uncalibrated wind components
+    serial : str
+        serial number of the Gill R2 sonic, in this case a zero-padded number
+        of length 4
+
+    Returns
+    -------
+    u_corr, v_corr, w_corr : array
+        calibrated wind components
+
+    """
     # load calibration tables
     dir_cal, mag_cal, w_up_cal, w_down_cal = get_calibration_values(serial)
     # get direction angle

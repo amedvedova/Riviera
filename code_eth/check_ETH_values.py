@@ -8,14 +8,9 @@
 #
 # Variable names in the database:
 # AHA = absolute humidity
-# AHS = abs. hum. st. dev
-# ATA = accoustic temperature (ATA1 = 1 min data)
-# ATS = accoustic temp st dev
-# MSA = scalar wind speed
-# NST = number of samples
-# PSA = barometric pressure
+# ATA = accoustic temperature
 # USA, VSA, WSA = wind components
-# USS, VSS, WSS = wind components st dev
+# MSA = wind speed
 #
 ###############################################################################
 
@@ -32,24 +27,25 @@ verbose = True
 # path to database files with 30 min averages, processed by Basel
 path_avg = '/home/alve/Desktop/Riviera/MAP_subset/data/database/data/asc/'
 
-# path to processed high resolution ETH data that I want to check
+# path to the processed high resolution ETH data to be checked
 path_data = '/home/alve/Desktop/Riviera/MAP_subset/data/eth_sonics_processed/'
 
-# choose some random files to load and compare (not all combinations work)
-tower = 'A1_1'
-# tower = 'B_2'
-# tower = 'C_1'
-# tower = 'D_1'
-# date = '_1999_08_25'
-date = '_1999_09_05'
-# date = '_1999_10_01'
+# choose some random files to load and compare: uncomment the desired sonic
+tower = 'A1_1'  # A, krypton
+# tower = 'A1_2'  # B
+# tower = 'A1_3'  # C, krypton
+# tower = 'B_1'  # E
+# tower = 'B_2'  # F, krypton
+# tower = 'B_3'  # G
+# tower = 'C_1'  # D
+# tower = 'D_1'  # H
 
 # %% load high-resolution and database data
 
-# High resolution
-# load the files as one combined data set
+# load the high resolution files as one combined data set
+n = 75
 files = sorted([os.path.join(path_data, f) for f in os.listdir(path_data)
-                if tower+date in f])
+                if tower in f])[n:n+25]
 ds = xr.open_mfdataset(files,
                        coords=['time'],
                        combine='nested',
@@ -67,8 +63,8 @@ ATApath = os.path.join(path_avg, 'ATA_'+sonicstring+'.asc')
 MSApath = os.path.join(path_avg, 'MSA_'+sonicstring+'.asc')
 
 # load files
-ATA = pd.read_csv(ATApath, header=None, na_values=-9999)
-MSA = pd.read_csv(MSApath, header=None, na_values=-9999)
+ATA = pd.read_csv(ATApath, header=None, na_values=-9999, names=['ATA'])
+MSA = pd.read_csv(MSApath, header=None, na_values=-9999, names=['MSA'])
 
 # get daterange for the data as indicated in the database
 #   starting at 10.07.1999 in 30 min initervals
@@ -81,7 +77,7 @@ MSA.index = daterange
 # if present, repeat for AHA (humidity)
 if sonicstring in ['A11', 'A13', 'B2']:
     AHApath = os.path.join(path_avg, 'AHA_'+sonicstring+'.asc')
-    AHA = pd.read_csv(AHApath, header=None, na_values=-9999)
+    AHA = pd.read_csv(AHApath, header=None, na_values=-9999, names=['AHA'])
     AHA.index = daterange
 
 
@@ -90,13 +86,10 @@ if sonicstring in ['A11', 'A13', 'B2']:
 # get 30 min averages of the needed variables from the high-resolution dataset
 variables = ['wspd', 'T']
 if sonicstring in ['A11', 'A13', 'B2']:
-    variables = ['wspd', 'T', 'q']
+    variables = ['wspd', 'T', 'rho_dry', 'rho_wet']
 
+# Get 30 minute averages
 ds_30min = ds[variables].resample(time='30min').mean(dim='time')
-
-# get voltage and try to see if I can get the Basel-like values
-# all calibration coefficients are in the attributes
-voltage = ds.voltage
 
 # Change K to C
 ds_30min['T'] = ds_30min['T'] - 273.15
@@ -107,17 +100,15 @@ MSA_30min = MSA.loc[ds_30min.time.values]
 if sonicstring in ['A11', 'A13', 'B2']:
     AHA_30min = AHA.loc[ds_30min.time.values]
 
-    # TODO this is wrong
-    # ds.q is specific humidity [kg/kg], we want absolute hum. [g/m^3]
-    q_abs = ds_30min.q * 1000 / 1.293  # [1 m^3 air = 1.293 kg]
 
-
-# %% Plotting and checking values
+# %% Plotting and checking values: temperature and wind speed
 
 # Figure + values: compare temperatures
 fig, ax = plt.subplots(figsize=[12, 12])
-ds_30min.T.plot(ax=ax)
-ATA_30min.plot(ax=ax)
+ds_30min.T.plot(ax=ax, label='high freq temp', linewidth=3)
+ATA_30min.plot(ax=ax, color='k', linestyle='-.')
+
+ax.legend()
 
 if verbose:
     print(ds_30min.T.values)
@@ -125,22 +116,31 @@ if verbose:
 
 # Figure + values: compare wind speeds
 fig, ax = plt.subplots(figsize=[12, 12])
-ds_30min.wspd.plot(ax=ax)
-MSA_30min.plot(ax=ax)
+ds_30min.wspd.plot(ax=ax, label='high freq wspd', linewidth=3)
+MSA_30min.plot(ax=ax, color='k', linestyle='-.')
+
+ax.legend()
 
 if verbose:
     print(ds_30min.wspd.values)
     print(MSA_30min.values.squeeze())
 
+
+# %% Humidity checks
+
 # Figure + values: compare humidity (if available)
 if sonicstring in ['A11', 'A13', 'B2']:
     fig, ax = plt.subplots(figsize=[12, 12])
-    q_abs.plot(ax=ax)
-    AHA_30min.plot(ax=ax)
+
+    ds_30min.rho_wet.plot(ax=ax, label='high freq rho_wet', linewidth=3)
+    ds_30min.rho_dry.plot(ax=ax, label='high freq rho_dry', linewidth=3)
+    AHA_30min.plot(ax=ax, label='database AHA', color='k', linestyle='-.')
+
+    ax.legend()
 
     if verbose:
-        print(q_abs.values)
-        # Huh, values of 35g/m^3 at below 20C, this seems wrong.
+        # Reasonable values for reference:
         # https://www.tis-gdv.de/tis_e/misc/klima-htm/
-        # Thus, no point in comparing!
+        print(ds_30min.rho_dry.values)
+        print(ds_30min.rho_wet.values)
         print(AHA_30min.values.squeeze())

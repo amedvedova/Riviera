@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+###############################################################################
+#
 # Read in .raw files, add metadata, save as .nc files with metadata
 # Usable only for Uni Basel CSAT3 sonics: location mn, levels 1 and 3 (N1, N3)
-# data from other Basel sonics is stored differently
+# Data from other Basel sonics is stored and processed differently.
 #
 #
 # CSAT FORMAT (1 character means 1 bit), see CSAT3 manual (Appendix B):
@@ -20,6 +22,8 @@
 #
 # Reference for easy binary/int16 conversions:
 # https://www.rapidtables.com/convert/number/decimal-to-binary.html
+#
+###############################################################################
 
 
 import numpy as np
@@ -34,12 +38,14 @@ from matrix_calibration import get_all_corrections as correct_matrix
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
 
+
 # flag: use the Uni Basel matrix calibration for the CSAT3 sonics
 calibrate = True
 
 # flag to save files, folder to which files will be saved
 savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
+
 
 # path to data from the MCR sonics at "mn" location
 path = "/home/alve/Desktop/Riviera/MAP_subset/data/mn/rohdaten/fast"
@@ -65,6 +71,7 @@ def range_from_binary(col_1, col_2):
     (u_full = u_stored * 0.001 * multiplication_factor); each multiplication
     factor is stored in two bits. Since the input is 2 bit values, there are
     four possible input/output values:
+    input bits: multiplication factor
     11: 0.25 (2e-2),
     10: 0.5 (2e-1),
     01: 1 (2e0),
@@ -104,8 +111,8 @@ def uvwt_from_file(file, count, serial, calibrate=True):
     serial : str
         serial number of the CSAT sonic
     calibrate : bool, optional
-        Flag - should the matrix calibration from Uni Basel be applied to the
-        raw data? The default is True.
+        Optional flag - should the matrix calibration from Uni Basel be applied
+        to the raw data? The default is True.
 
     Returns
     -------
@@ -137,7 +144,7 @@ def uvwt_from_file(file, count, serial, calibrate=True):
     uy = range_from_binary(scales_y[:, 0], scales_y[:, 1])
     uz = range_from_binary(scales_z[:, 0], scales_z[:, 1])
 
-    # conversions based on the reference manual
+    # conversions based on the reference manual: wind components, temperature
     uvwt[:, 0] = uvwt[:, 0] * 0.001 * ux
     uvwt[:, 1] = uvwt[:, 1] * 0.001 * uy
     uvwt[:, 2] = uvwt[:, 2] * 0.001 * uz
@@ -306,6 +313,12 @@ for f_raw in f_raw_all:
         ds.attrs['sonic location [lat, lon]'] = sonic_latlon[loc]
         ds.attrs['tower altitude [m a.s.l.]'] = height_asl[loc]
         ds.time.attrs['info'] = 'time in CET'
+
+        # add info about calibration
+        if calibrate:
+            ds.attrs['calibration applied'] = 'matrix'
+        else:
+            ds.attrs['calibration applied'] = 'none'
 
         # save data
         if savefiles:

@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+###############################################################################
+#
 # Read in .raw files, add metadata, save as .nc files with metadata
 # Usable only for Uni Basel Metek sonic: location ro, level 1 (N1)
-# data from other Basel sonics is stored differently
+# Data from other Basel sonics is stored and processed differently.
+#
+# Metek .raw files store ascii values, each correct line is 41 characters long
+# and the needed values are always at the same position on each line.
+#
+###############################################################################
 
 
 import numpy as np
@@ -18,18 +25,14 @@ from matrix_calibration import get_all_corrections as correct_matrix
 from sonic_metadata import sonic_location, sonic_height, sonic_SN, \
                            sonic_latlon, height_asl
 
-# TODO check with Iva about what to do
-# DoY 212 - DoY 214 8:30 OR DoY 216 22:30 saved as summer CET, not CET
-# DoY 216 - 218 missing anyway
-# since there's no distinct daiy cycle on the first few days, this is not
-# possible to determine
 
-# flag: use the Uni Basel matrix calibration for the Metek sonic
+# flag: apply the Uni Basel matrix calibration to the Metek sonic raw data?
 calibrate = True
 
 # flag to save files, folder to which files will be saved
 savefiles = True
 save_folder = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
+
 
 # path to data from the MCR sonics at "mn" location
 path = "/home/alve/Desktop/Riviera/MAP_subset/data/ro/rohdaten/fast"
@@ -78,8 +81,8 @@ def uvwt_from_file(lines, calibrate=True):
             uvwt[i, 0] = float(l[6:12]) / 100.0
             uvwt[i, 1] = float(l[16:22]) / 100.0
             uvwt[i, 2] = float(l[26:32]) / 100.0
-            uvwt[i, 3] = float(l[36:42]) / 100.0 + 273.15
-        # if not, continue to the next line
+            uvwt[i, 3] = float(l[36:42]) / 100.0 + 273.15  # convert C to K
+        # if not, continue to the next line, leave NaNs in the incorrect line
         else:
             continue
 
@@ -96,6 +99,7 @@ def uvwt_from_file(lines, calibrate=True):
         uvwt[:, 0] = -1 * u_corr
         uvwt[:, 1] = -1 * v_corr
         uvwt[:, 2] = w_corr
+
     return uvwt
 
 
@@ -136,7 +140,7 @@ def ds_from_uvwt(uvwt_full, date, date_rounded):
     uvwt = np.pad(uvwt, ((missing_front, 0), (0, 0)),
                   'constant', constant_values=np.nan)
 
-    # on the other hand, pad to 36000 for shorter files
+    # on the other hand, pad to 18000 for shorter files
     missing_end = 18000 - uvwt.shape[0]
     uvwt = np.pad(uvwt, ((0, missing_end), (0, 0)),
                   'constant', constant_values=np.nan)
@@ -249,6 +253,12 @@ for f_raw in f_raw_all:
         ds.attrs['sonic height [m]'] = sonic_height[loc]
         ds.attrs['sonic location [lat, lon]'] = sonic_latlon[loc]
         ds.attrs['tower altitude [m a.s.l.]'] = height_asl[loc]
+
+        # add info about calibration
+        if calibrate:
+            ds.attrs['calibration applied'] = 'matrix'
+        else:
+            ds.attrs['calibration applied'] = 'none'
 
         # save data
         if savefiles:

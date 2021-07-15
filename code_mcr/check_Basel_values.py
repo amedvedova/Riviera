@@ -8,7 +8,6 @@
 #
 # Variable names in the database:
 # AHA = absolute humidity
-# AHS = abs. hum. st. dev
 # ATA = accoustic temperature
 # MSA = scalar wind speed
 # USA, VSA, WSA = wind components
@@ -28,7 +27,7 @@ from matrix_calibration import get_all_corrections as correct_matrix
 from gill_calibration import get_all_corrections as correct_gill
 
 
-# Indicates whether the uvw values should be calibrated in this script. 
+# Indicates whether the uvw values should be calibrated in this script.
 # Set to true only if the files were NOT calibrated beforehand!
 calibrate = False
 # Print information, plot extra figures
@@ -43,7 +42,7 @@ path_data = '/home/alve/Desktop/Riviera/MAP_subset/data/basel_sonics_processed/'
 
 
 # Gill sonics: tower+level, calibration, serial number
-tower = 'E1_2'  # matrix, 043
+tower = 'E1_2'  # matrix, 043, krypton
 # tower = 'E2_3'  # gill, 211
 # tower = 'E2_4'  # gill, 213
 # tower = 'E2_5'  # matrix, 212
@@ -58,14 +57,15 @@ tower = 'E1_2'  # matrix, 043
 # tower = 'E2_2'  # matrix, 199
 
 # Gill HS sonic: tower+level, calibration
-# tower = 'E2_6'  # matrix
+# tower = 'E2_6'  # matrix, krypton
 
 
 # %% load high-resolution and database data
 
 # choose some random files, load the files as one combined data set
+n = 300
 files = sorted([os.path.join(path_data, f) for f in os.listdir(path_data)
-                if tower in f])[5:30]
+                if tower in f])[n:n+25]
 ds = xr.open_mfdataset(files,
                        coords=['time'],
                        combine='nested',
@@ -81,7 +81,7 @@ w = ds.w.load().values
 if calibrate:
     # get serial number
     serial = ds.attrs['sonic serial number']
-    # TODO write a sonic-dependent calibration
+    # Sonic-dependent calibration
     if 'Gill R2' in serial:
         # matrix calibration
         if serial[-3:] in ['043', '212', '160']:
@@ -284,6 +284,7 @@ try:
         print(ds_30min.q.values)
         print('database:')
         print(AHA_30min.values.squeeze())
+        print(AHA_30min.values.squeeze() - ds_30min.q.values)
         print('')
 except FileNotFoundError:
     pass
